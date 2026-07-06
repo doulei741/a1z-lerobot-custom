@@ -1,0 +1,6 @@
+[submodule "lerobot"]
+	path = lerobot
+	url = https://github.com/huggingface/lerobot.git
+[submodule "GALAXEA-A1Z"]
+	path = GALAXEA-A1Z
+	url = https://github.com/userguide-galaxea/GALAXEA-A1Z.git

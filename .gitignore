@@ -1,0 +1,12 @@
+*.png
+*.jpg
+*.mp4
+__pycache__/
+*.py[cod]
+*.pyo
+*.bak
+
+tmp
+tests
+docs
+legacy/

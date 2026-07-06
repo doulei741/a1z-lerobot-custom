@@ -1,0 +1,31 @@
+robot:
+  type: a1z
+  left_can: can0
+  right_can: can1
+  cameras:
+    head_rgb:
+      type: opencv
+      index_or_path: 4
+      width: 640
+      height: 360
+      fps: 30
+      warmup_s: 3
+      fourcc: MJPG
+    left_wrist_rgb:
+      type: opencv
+      index_or_path: 2
+      width: 640
+      height: 360
+      fps: 30
+      warmup_s: 3
+      fourcc: MJPG
+    right_wrist_rgb:
+      type: opencv
+      index_or_path: 0
+      width: 640
+      height: 360
+      fps: 30
+      warmup_s: 3
+      fourcc: MJPG
+
+display_data: false
