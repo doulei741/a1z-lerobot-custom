@@ -9,8 +9,7 @@ description = "LeRobot integration for GALAXEA A1Z single-arm and dual-arm workf
 requires-python = ">=3.12"
 dependencies = [
     "numpy",
-    "opencv-python",
-    "tyro",
+    "opencv-python-headless",
     "tqdm",
     "torch",
 ]
