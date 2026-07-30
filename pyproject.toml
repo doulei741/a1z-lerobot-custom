@@ -20,6 +20,7 @@ dependencies = [
 # 或 pip install lerobot
 
 [project.scripts]
+a1z-calibrate-leader = "a1z_lerobot.scripts.calibrate_leader:main"
 a1z-teleoperate-single = "a1z_lerobot.scripts.teleoperate_single:main"
 a1z-record-single = "a1z_lerobot.scripts.record_single:main"
 a1z-train-act-single = "a1z_lerobot.scripts.train_act_single:main"

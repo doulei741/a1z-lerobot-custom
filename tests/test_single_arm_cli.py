@@ -1,5 +1,59 @@
 import sys
 
+import pytest
+
+
+def test_calibrate_leader_command_constructs_requested_leader_and_disconnects(monkeypatch):
+    import a1z_lerobot.scripts.calibrate_leader as command
+
+    events = []
+
+    class FakeLeader:
+        def __init__(self, config):
+            assert config.id == "bench_leader"
+            assert config.port == "/dev/ttyUSB9"
+            self.is_connected = False
+
+        def connect(self):
+            self.is_connected = True
+            events.append("connect")
+
+        def disconnect(self):
+            self.is_connected = False
+            events.append("disconnect")
+
+    monkeypatch.setattr(command, "A1ZLeader", FakeLeader)
+
+    command.calibrate_leader("/dev/ttyUSB9", "bench_leader")
+
+    assert events == ["connect", "disconnect"]
+
+
+def test_calibrate_leader_command_disconnects_after_calibration_error(monkeypatch):
+    import a1z_lerobot.scripts.calibrate_leader as command
+
+    events = []
+
+    class FailingLeader:
+        def __init__(self, config):
+            self.is_connected = False
+
+        def connect(self):
+            self.is_connected = True
+            events.append("connect")
+            raise RuntimeError("calibration interrupted")
+
+        def disconnect(self):
+            self.is_connected = False
+            events.append("disconnect")
+
+    monkeypatch.setattr(command, "A1ZLeader", FailingLeader)
+
+    with pytest.raises(RuntimeError, match="calibration interrupted"):
+        command.calibrate_leader("/dev/ttyUSB9", "bench_leader")
+
+    assert events == ["connect", "disconnect"]
+
 
 def test_record_yaml_decodes_to_complete_single_arm_rgb_configuration():
     import draccus
