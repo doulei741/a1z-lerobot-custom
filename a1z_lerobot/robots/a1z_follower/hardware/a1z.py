@@ -47,10 +47,20 @@ class A1ZArm:
         gripper_raw = _norm_to_raw(self._arm.gripper.get_feedback_norm())
         return np.concatenate([pos, [gripper_raw]]).astype(np.float32)
 
+    def get_state_normalized(self) -> np.ndarray:
+        """Return 7D state [j1..j6 rad, gripper normalized to 0=closed, 1=open]."""
+        obs = self._arm.get_joint_state()
+        gripper = self._arm.gripper.get_feedback_norm()
+        return np.concatenate([obs["pos"], [gripper]]).astype(np.float32)
+
     def send_command(self, cmd: np.ndarray) -> None:
         """Send a 7D command [j1..j6 rad, gripper_raw_rad]; gripper converted raw rad -> normalized."""
         self._arm.command_joint_pos(cmd[:6])
         self._arm.gripper.command(_raw_to_norm(float(cmd[6])))
+
+    def send_command_normalized(self, cmd: np.ndarray) -> None:
+        """Send [j1..j6 rad, gripper normalized to 0=closed, 1=open]."""
+        self._arm.command_joint_pos(np.asarray(cmd, dtype=np.float32))
 
     def command_gripper(self, pos: float) -> None:
         """Send a gripper position command (raw rad)."""

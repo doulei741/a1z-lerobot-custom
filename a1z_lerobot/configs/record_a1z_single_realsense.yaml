@@ -1,0 +1,48 @@
+robot:
+  type: a1z_single
+  id: a1z_single
+  can_channel: can0
+  cameras:
+    top_rgb:
+      type: intelrealsense
+      serial_number_or_name: Intel RealSense D435
+      width: 640
+      height: 480
+      fps: 30
+      color_mode: rgb
+      use_depth: false
+    wrist_rgb:
+      type: intelrealsense
+      serial_number_or_name: Intel RealSense D405
+      width: 640
+      height: 480
+      fps: 30
+      color_mode: rgb
+      use_depth: false
+  ema_alpha: 0.3
+  max_joint_delta: 0.05
+  return_home_on_disconnect: false
+
+teleop:
+  type: a1z_leader
+  id: a1z_leader
+  port: /dev/ttyACM0
+  joint_signs: [1, 1, 1, 1, 1, 1]
+  joint_scales: [1, 1, 1, 1, 1, 1]
+  joint_offsets_rad: [0, 0, 0, 0, 0, 0]
+
+dataset:
+  repo_id: local/a1z_single
+  single_task: Replace this text with the task performed in every episode
+  root: datasets/a1z_single
+  fps: 30
+  episode_time_s: 60
+  reset_time_s: 30
+  num_episodes: 50
+  video: true
+  push_to_hub: false
+  num_image_writer_processes: 0
+  num_image_writer_threads_per_camera: 4
+
+display_data: true
+play_sounds: true

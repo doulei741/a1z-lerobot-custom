@@ -84,3 +84,135 @@ bash a1z_lerobot/scripts/rollout_<your policy>.sh
 ```
 
 - 默认**同步推理**；加 `--inference.type=rtc` 走 **RTC 异步推理**。
+
+## 单臂 A1Z：七轴示教、双 RealSense、ACT
+
+单臂类型注册为 `a1z_single`，遥操作器注册为 `a1z_leader`。示教臂使用 7 个
+STS3215：ID 1–6 对应 A1Z J1–J6，ID 7 对应夹爪。状态与动作顺序固定为：
+
+```text
+arm_0, arm_1, arm_2, arm_3, arm_4, arm_5, gripper
+```
+
+前六轴单位为弧度；夹爪使用归一化值 `0=闭合、1=张开`。单臂数据和双臂 14D
+数据互不兼容，不要混用数据集或 checkpoint。
+
+当前 LeRobot 子模块要求 Python 3.12 或更高。建议在独立环境安装：
+
+```bash
+pip install -e 'lerobot[hardware,feetech,intelrealsense,training]'
+pip install -e GALAXEA-A1Z
+pip install -e .
+```
+
+### 1. 查找硬件
+
+```bash
+lerobot-find-port
+lerobot-find-cameras realsense
+```
+
+记录 D435、D405 的序列号以及七轴示教臂串口。配置文件默认可按唯一设备名识别
+`Intel RealSense D435` 和 `Intel RealSense D405`；长期使用推荐通过命令行覆盖为实际
+序列号。
+
+每次开机只启动单条 A1Z CAN：
+
+```bash
+bash a1z_lerobot/scripts/setup.sh can0
+```
+
+### 2. 七轴示教器校准和低速遥控
+
+首次连接会进入 LeRobot 校准流程。前六个关节使用角度校准，夹爪记录完整开闭行程。
+先在空工作区、急停可用条件下运行 10 秒低速验证：
+
+```bash
+python -m a1z_lerobot.scripts.teleoperate_single \
+  --robot.type=a1z_single \
+  --robot.id=a1z_single \
+  --robot.can_channel=can0 \
+  --robot.cameras='{}' \
+  --robot.ema_alpha=0.3 \
+  --robot.max_joint_delta=0.02 \
+  --teleop.type=a1z_leader \
+  --teleop.id=a1z_leader \
+  --teleop.port=/dev/ttyACM0 \
+  --fps=30 \
+  --teleop_time_s=10
+```
+
+如果某轴方向或零位不一致，通过参数调整，不要修改转换代码：
+
+```text
+--teleop.joint_signs='[1,-1,1,1,1,1]'
+--teleop.joint_scales='[1,1,1,1,1,1]'
+--teleop.joint_offsets_rad='[0,0,0,0,0,0]'
+```
+
+### 3. 录制 LeRobot v3 数据
+
+默认录制配置是 [record_a1z_single_realsense.yaml](a1z_lerobot/configs/record_a1z_single_realsense.yaml)：
+
+- D435：`top_rgb`
+- D405：`wrist_rgb`
+- 两路均为 RGB 640×480@30，`use_depth=false`
+- 单臂状态 7D、实际下发动作 7D
+- 默认仅保存到本地，不上传 Hub
+
+使用实际串口、相机序列号、数据路径和任务覆盖默认值：
+
+```bash
+python -m a1z_lerobot.scripts.record_single \
+  --config_path=a1z_lerobot/configs/record_a1z_single_realsense.yaml \
+  --teleop.port=/dev/ttyACM0 \
+  --robot.cameras.top_rgb.serial_number_or_name=D435_SERIAL \
+  --robot.cameras.wrist_rgb.serial_number_or_name=D405_SERIAL \
+  --dataset.repo_id=local/a1z_pick \
+  --dataset.root=datasets/a1z_pick \
+  --dataset.single_task='Pick up the object and place it in the tray' \
+  --dataset.num_episodes=50
+```
+
+相机数量完全由 `--robot.cameras` 字典决定。删除某个配置键即可录制单相机；增加新的
+CameraConfig 键即可录制更多相机。训练和推理必须使用完全相同的视觉键。
+
+录制循环保存 `Robot.send_action()` 返回的实际动作，因此 EMA、逐帧限幅和物理限位后
+的 A1Z 指令就是训练标签。
+
+### 4. RTX 4060 上训练 ACT
+
+本机检测到 NVIDIA GeForce RTX 4060 Laptop GPU，显存约 7.62 GiB。单臂训练入口默认
+补充 `policy.type=act`、`policy.device=cuda` 和 `batch_size=8`：
+
+```bash
+python -m a1z_lerobot.scripts.train_act_single \
+  --dataset.repo_id=local/a1z_pick \
+  --dataset.root=datasets/a1z_pick \
+  --output_dir=outputs/act_a1z_single \
+  --steps=100000 \
+  --save_freq=10000
+```
+
+若训练时 CUDA 显存不足，先添加 `--batch_size=4`。数据仍保存 480p；不要为了调整
+batch size 改变录制数据特征。
+
+### 5. ACT 单臂推理
+
+推理配置是 [a1z_single_realsense.yaml](a1z_lerobot/configs/a1z_single_realsense.yaml)。
+默认不在退出时自动回初始位，也不在 Robot 断开时自动回零：
+
+```bash
+python -m a1z_lerobot.scripts.rollout_act_single \
+  --config_path=a1z_lerobot/configs/a1z_single_realsense.yaml \
+  --robot.cameras.top_rgb.serial_number_or_name=D435_SERIAL \
+  --robot.cameras.wrist_rgb.serial_number_or_name=D405_SERIAL \
+  --policy.path=outputs/act_a1z_single/checkpoints/last/pretrained_model \
+  --strategy.type=base \
+  --inference.type=sync \
+  --task='Pick up the object and place it in the tray' \
+  --duration=30
+```
+
+rollout 会在控制前核对 checkpoint 的状态、动作和视觉特征。ACT 使用同步推理；RTC
+主要用于推理延迟更高的 VLA，不是此单臂 ACT 流程的默认选项。

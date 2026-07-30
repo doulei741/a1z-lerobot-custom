@@ -5,7 +5,7 @@ build-backend = "flit_core.buildapi"
 [project]
 name = "a1z_lerobot"
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "numpy",
     "opencv-python",
@@ -18,6 +18,12 @@ dependencies = [
 # lerobot 按实际安装方式处理，不写死版本
 # pip install -e /path/to/lerobot
 # 或 pip install lerobot
+
+[project.scripts]
+a1z-teleoperate-single = "a1z_lerobot.scripts.teleoperate_single:main"
+a1z-record-single = "a1z_lerobot.scripts.record_single:main"
+a1z-train-act-single = "a1z_lerobot.scripts.train_act_single:main"
+a1z-rollout-act-single = "a1z_lerobot.scripts.rollout_act_single:main"
 
 [tool.flit.module]
 name = "a1z_lerobot"

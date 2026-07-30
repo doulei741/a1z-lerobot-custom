@@ -1,0 +1,27 @@
+robot:
+  type: a1z_single
+  can_channel: can0
+  cameras:
+    top_rgb:
+      type: intelrealsense
+      serial_number_or_name: Intel RealSense D435
+      width: 640
+      height: 480
+      fps: 30
+      color_mode: rgb
+      use_depth: false
+    wrist_rgb:
+      type: intelrealsense
+      serial_number_or_name: Intel RealSense D405
+      width: 640
+      height: 480
+      fps: 30
+      color_mode: rgb
+      use_depth: false
+  ema_alpha: 0.3
+  max_joint_delta: 0.05
+  return_home_on_disconnect: false
+
+fps: 30
+display_data: false
+return_to_initial_position: false
