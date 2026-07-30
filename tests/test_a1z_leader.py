@@ -41,6 +41,14 @@ def test_map_leader_positions_converts_all_six_joints_and_gripper():
     assert action["gripper.pos"] == pytest.approx(0.25)
 
 
+def test_leader_default_mapping_reverses_first_and_sixth_joint():
+    from a1z_lerobot.teleoperators.a1z_leader.config_a1z_leader import A1ZLeaderConfig
+
+    config = A1ZLeaderConfig(port="/dev/ttyACM0")
+
+    assert config.joint_signs == (-1.0, 1.0, 1.0, 1.0, 1.0, -1.0)
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -122,7 +130,7 @@ def test_a1z_leader_uses_motor_ids_one_through_seven_and_emits_mapped_action(mon
         "arm_5.pos",
         "gripper.pos",
     ]
-    assert action["arm_5.pos"] == pytest.approx(math.radians(50))
+    assert action["arm_5.pos"] == pytest.approx(-math.radians(50))
     assert action["gripper.pos"] == pytest.approx(0.75)
 
 

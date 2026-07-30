@@ -150,7 +150,7 @@ python -m a1z_lerobot.scripts.teleoperate_single \
 如果某轴方向或零位不一致，通过参数调整，不要修改转换代码：
 
 ```text
---teleop.joint_signs='[1,-1,1,1,1,1]'
+--teleop.joint_signs='[-1,1,1,1,1,-1]'
 --teleop.joint_scales='[1,1,1,1,1,1]'
 --teleop.joint_offsets_rad='[0,0,0,0,0,0]'
 ```

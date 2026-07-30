@@ -27,7 +27,7 @@ teleop:
   type: a1z_leader
   id: a1z_leader
   port: /dev/ttyACM0
-  joint_signs: [1, 1, 1, 1, 1, 1]
+  joint_signs: [-1, 1, 1, 1, 1, -1]
   joint_scales: [1, 1, 1, 1, 1, 1]
   joint_offsets_rad: [0, 0, 0, 0, 0, 0]
 

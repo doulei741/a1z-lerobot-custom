@@ -10,7 +10,7 @@ class A1ZLeaderConfig(TeleoperatorConfig):
     """Configuration for the seven-STS3215 A1Z-shaped leader arm."""
 
     port: str
-    joint_signs: tuple[float, ...] = (1.0,) * 6
+    joint_signs: tuple[float, ...] = (-1.0, 1.0, 1.0, 1.0, 1.0, -1.0)
     joint_scales: tuple[float, ...] = (1.0,) * 6
     joint_offsets_rad: tuple[float, ...] = (0.0,) * 6
 
