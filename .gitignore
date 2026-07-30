@@ -9,4 +9,5 @@ __pycache__/
 tmp
 tests
 docs
+.worktrees/
 legacy/
