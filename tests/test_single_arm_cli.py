@@ -14,9 +14,15 @@ def test_calibrate_leader_command_constructs_requested_leader_and_disconnects(mo
             assert config.port == "/dev/ttyUSB9"
             self.is_connected = False
 
-        def connect(self):
+        def connect(self, calibrate=True):
             self.is_connected = True
-            events.append("connect")
+            events.append(("connect", calibrate))
+
+        def calibrate(self):
+            events.append("calibrate")
+
+        def configure(self):
+            events.append("configure")
 
         def disconnect(self):
             self.is_connected = False
@@ -26,7 +32,7 @@ def test_calibrate_leader_command_constructs_requested_leader_and_disconnects(mo
 
     command.calibrate_leader("/dev/ttyUSB9", "bench_leader")
 
-    assert events == ["connect", "disconnect"]
+    assert events == [("connect", False), "calibrate", "configure", "disconnect"]
 
 
 def test_calibrate_leader_command_disconnects_after_calibration_error(monkeypatch):
@@ -38,10 +44,16 @@ def test_calibrate_leader_command_disconnects_after_calibration_error(monkeypatc
         def __init__(self, config):
             self.is_connected = False
 
-        def connect(self):
+        def connect(self, calibrate=True):
             self.is_connected = True
-            events.append("connect")
+            events.append(("connect", calibrate))
+
+        def calibrate(self):
+            events.append("calibrate")
             raise RuntimeError("calibration interrupted")
+
+        def configure(self):
+            events.append("configure")
 
         def disconnect(self):
             self.is_connected = False
@@ -52,7 +64,7 @@ def test_calibrate_leader_command_disconnects_after_calibration_error(monkeypatc
     with pytest.raises(RuntimeError, match="calibration interrupted"):
         command.calibrate_leader("/dev/ttyUSB9", "bench_leader")
 
-    assert events == ["connect", "disconnect"]
+    assert events == [("connect", False), "calibrate", "disconnect"]
 
 
 def test_record_yaml_decodes_to_complete_single_arm_rgb_configuration():

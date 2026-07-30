@@ -15,10 +15,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def calibrate_leader(port: str, leader_id: str) -> None:
-    """Run the existing interactive Leader calibration and always disconnect it."""
+    """Force interactive calibration, even when an older file already exists."""
     leader = A1ZLeader(A1ZLeaderConfig(id=leader_id, port=port))
     try:
-        leader.connect()
+        leader.connect(calibrate=False)
+        leader.calibrate()
+        leader.configure()
     finally:
         if leader.is_connected:
             leader.disconnect()
