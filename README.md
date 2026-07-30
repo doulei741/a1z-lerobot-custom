@@ -140,7 +140,6 @@ python -m a1z_lerobot.scripts.teleoperate_single \
   --robot.cameras='{}' \
   --robot.ema_alpha=0.3 \
   --robot.max_joint_delta=0.02 \
-  --robot.relative_action_reference=true \
   --teleop.type=a1z_leader \
   --teleop.id=a1z_leader \
   --teleop.port=/dev/ttyACM0 \
@@ -185,9 +184,6 @@ CameraConfig 键即可录制更多相机。训练和推理必须使用完全相�
 
 录制循环保存 `Robot.send_action()` 返回的实际动作，因此 EMA、逐帧限幅和物理限位后
 的 A1Z 指令就是训练标签。
-
-单臂遥操作和录制使用相对参考：连接时保持 A1Z 的当前姿态，随后仅跟随 Leader 的关节
-变化量。ACT 推理不启用该选项，仍将模型输出作为绝对 A1Z 动作。
 
 ### 4. RTX 4060 上训练 ACT
 
