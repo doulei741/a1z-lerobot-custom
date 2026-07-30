@@ -46,9 +46,9 @@ def test_leader_default_mapping_reverses_first_and_sixth_joint():
 
     config = A1ZLeaderConfig(port="/dev/ttyACM0")
 
-    assert config.joint_signs == (-1.0, -1.0, -1.0, 1.0, 1.0, -1.0)
+    assert config.joint_signs == (-1.0, 1.0, 1.0, 1.0, 1.0, -1.0)
     assert config.joint_offsets_rad == pytest.approx(
-        (-0.040418965, -1.556060913, 1.709433057, -0.144229406, -0.011507665, -0.016411362)
+        (-0.040418965, 1.567886653, -1.698370257, -0.144229406, -0.011507665, -0.016411362)
     )
 
 

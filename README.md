@@ -144,8 +144,8 @@ python -m a1z_lerobot.scripts.teleoperate_single \
   --teleop.type=a1z_leader \
   --teleop.id=a1z_leader \
   --teleop.port=/dev/ttyACM0 \
-  --teleop.joint_signs='[-1,-1,-1,1,1,-1]' \
-  --teleop.joint_offsets_rad='[-0.040418965,-1.556060913,1.709433057,-0.144229406,-0.011507665,-0.016411362]' \
+  --teleop.joint_signs='[-1,1,1,1,1,-1]' \
+  --teleop.joint_offsets_rad='[-0.040418965,1.567886653,-1.698370257,-0.144229406,-0.011507665,-0.016411362]' \
   --fps=30 \
   --teleop_time_s=10
 ```
@@ -153,9 +153,9 @@ python -m a1z_lerobot.scripts.teleoperate_single \
 如果某轴方向或零位不一致，通过参数调整，不要修改转换代码：
 
 ```text
---teleop.joint_signs='[-1,-1,-1,1,1,-1]'
+--teleop.joint_signs='[-1,1,1,1,1,-1]'
 --teleop.joint_scales='[1,1,1,1,1,1]'
---teleop.joint_offsets_rad='[-0.040418965,-1.556060913,1.709433057,-0.144229406,-0.011507665,-0.016411362]'
+--teleop.joint_offsets_rad='[-0.040418965,1.567886653,-1.698370257,-0.144229406,-0.011507665,-0.016411362]'
 ```
 
 ### 3. 录制 LeRobot v3 数据
