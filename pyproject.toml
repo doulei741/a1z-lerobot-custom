@@ -5,6 +5,7 @@ build-backend = "flit_core.buildapi"
 [project]
 name = "a1z_lerobot"
 version = "0.1.0"
+description = "LeRobot integration for GALAXEA A1Z single-arm and dual-arm workflows"
 requires-python = ">=3.12"
 dependencies = [
     "numpy",
