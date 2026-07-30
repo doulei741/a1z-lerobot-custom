@@ -112,9 +112,8 @@ lerobot-find-port
 lerobot-find-cameras realsense
 ```
 
-记录 D435、D405 的序列号以及七轴示教臂串口。配置文件默认可按唯一设备名识别
-`Intel RealSense D435` 和 `Intel RealSense D405`；长期使用推荐通过命令行覆盖为实际
-序列号。
+当前配置已绑定 D435 序列号 `025222071608`、D405 序列号 `260522273365` 和七轴
+示教臂串口 `/dev/ttyACM0`。若更换设备，再通过命令行覆盖为实际序列号和串口。
 
 每次开机只启动单条 A1Z CAN：
 
@@ -124,8 +123,14 @@ bash a1z_lerobot/scripts/setup.sh can0
 
 ### 2. 七轴示教器校准和低速遥控
 
-首次连接会进入 LeRobot 校准流程。前六个关节使用角度校准，夹爪记录完整开闭行程。
-先在空工作区、急停可用条件下运行 10 秒低速验证：
+先单独校准 Leader；此命令只访问 `/dev/ttyACM0` 上的 STS3215，不连接 A1Z、CAN 或相机：
+
+```bash
+a1z-calibrate-leader --port=/dev/ttyACM0 --id=a1z_leader
+```
+
+首次校准时，按提示手动摆动 `arm_0..arm_4` 与夹爪至安全机械行程；`arm_5` 保持不动，
+按全圈关节校准。随后在空工作区、急停可用条件下运行 10 秒低速验证：
 
 ```bash
 python -m a1z_lerobot.scripts.teleoperate_single \
