@@ -129,8 +129,8 @@ bash a1z_lerobot/scripts/setup.sh can0
 a1z-calibrate-leader --port=/dev/ttyACM0 --id=a1z_leader
 ```
 
-首次校准时，按提示手动摆动 `arm_0..arm_4` 与夹爪至安全机械行程；`arm_5` 保持不动，
-按全圈关节校准。随后在空工作区、急停可用条件下运行 10 秒低速验证：
+首次校准时，按提示手动摆动 `arm_0..arm_5` 与夹爪至安全机械行程。随后在空工作区、
+急停可用条件下运行 10 秒低速验证：
 
 ```bash
 python -m a1z_lerobot.scripts.teleoperate_single \

@@ -124,3 +124,54 @@ def test_a1z_leader_uses_motor_ids_one_through_seven_and_emits_mapped_action(mon
     ]
     assert action["arm_5.pos"] == pytest.approx(math.radians(50))
     assert action["gripper.pos"] == pytest.approx(0.75)
+
+
+def test_a1z_leader_calibration_records_arm_five_range(monkeypatch, tmp_path):
+    import a1z_lerobot.teleoperators.a1z_leader.a1z_leader as leader_module
+    from a1z_lerobot.teleoperators.a1z_leader.config_a1z_leader import A1ZLeaderConfig
+
+    class FakeBus:
+        def __init__(self, *, port, motors, calibration):
+            self.motors = motors
+            self.ranged_motors = None
+            self.written_calibration = None
+
+        def disable_torque(self):
+            pass
+
+        def write(self, register, motor, value):
+            assert register == "Operating_Mode"
+
+        def set_half_turn_homings(self):
+            return {name: index for index, name in enumerate(self.motors)}
+
+        def record_ranges_of_motion(self, motors):
+            self.ranged_motors = list(motors)
+            return (
+                {name: 100 + index for index, name in enumerate(motors)},
+                {name: 3000 + index for index, name in enumerate(motors)},
+            )
+
+        def write_calibration(self, calibration):
+            self.written_calibration = calibration
+
+    monkeypatch.setattr(leader_module, "FeetechMotorsBus", FakeBus)
+    monkeypatch.setattr("builtins.input", lambda prompt: "")
+    leader = leader_module.A1ZLeader(
+        A1ZLeaderConfig(id="calibration_test", port="/dev/ttyACM7", calibration_dir=tmp_path)
+    )
+    monkeypatch.setattr(leader, "_save_calibration", lambda: None)
+
+    leader.calibrate()
+
+    assert leader.bus.ranged_motors == [
+        "arm_0",
+        "arm_1",
+        "arm_2",
+        "arm_3",
+        "arm_4",
+        "arm_5",
+        "gripper",
+    ]
+    assert leader.calibration["arm_5"].range_min == 105
+    assert leader.calibration["arm_5"].range_max == 3005

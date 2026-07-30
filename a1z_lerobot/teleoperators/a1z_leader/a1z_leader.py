@@ -105,14 +105,12 @@ class A1ZLeader(Teleoperator):
 
         input(f"Move {self} to the middle of every joint range and press ENTER...")
         homing_offsets = self.bus.set_half_turn_homings()
-        ranged_motors = [*JOINT_NAMES[:5], "gripper"]
+        ranged_motors = [*JOINT_NAMES, "gripper"]
         print(
-            "Move arm_0..arm_4 and gripper through their full ranges. "
-            "Keep arm_5 still. Press ENTER to stop."
+            "Move arm_0..arm_5 and gripper through their full ranges. "
+            "Press ENTER to stop."
         )
         range_mins, range_maxes = self.bus.record_ranges_of_motion(ranged_motors)
-        range_mins["arm_5"] = 0
-        range_maxes["arm_5"] = 4095
 
         self.calibration = {
             name: MotorCalibration(
