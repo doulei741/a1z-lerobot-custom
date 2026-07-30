@@ -14,6 +14,7 @@ class A1ZSingleConfig(RobotConfig):
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
     ema_alpha: float = 0.3
     max_joint_delta: float = 0.05
+    gripper_start_hold: bool = False
     return_home_on_disconnect: bool = False
 
     def __post_init__(self) -> None:

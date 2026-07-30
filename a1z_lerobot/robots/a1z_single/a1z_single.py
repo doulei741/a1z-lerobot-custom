@@ -87,6 +87,8 @@ class A1ZSingle(Robot):
         self.arm: A1ZArm | None = None
         self._connected = False
         self._previous_action: np.ndarray | None = None
+        self._gripper_leader_reference: float | None = None
+        self._gripper_follower_reference: float | None = None
 
     @property
     def _motors_ft(self) -> dict[str, type]:
@@ -134,6 +136,8 @@ class A1ZSingle(Robot):
                 camera.connect()
                 connected_cameras.append(camera)
             self._previous_action = self.arm.get_state_normalized()
+            self._gripper_leader_reference = None
+            self._gripper_follower_reference = float(self._previous_action[6])
             self._connected = True
         except Exception:
             for camera in reversed(connected_cameras):
@@ -155,6 +159,19 @@ class A1ZSingle(Robot):
 
     @check_if_not_connected
     def send_action(self, action: RobotAction) -> RobotAction:
+        if self.config.gripper_start_hold:
+            action = dict(action)
+            if self._gripper_leader_reference is None:
+                self._gripper_leader_reference = float(action["gripper.pos"])
+            action["gripper.pos"] = float(
+                np.clip(
+                    self._gripper_follower_reference
+                    + float(action["gripper.pos"])
+                    - self._gripper_leader_reference,
+                    0.0,
+                    1.0,
+                )
+            )
         sent = process_single_action(
             action,
             previous=self._previous_action,
@@ -190,6 +207,8 @@ class A1ZSingle(Robot):
             self.arm = None
             self._connected = False
             self._previous_action = None
+            self._gripper_leader_reference = None
+            self._gripper_follower_reference = None
         if first_error is not None:
             raise first_error
         logger.info("%s disconnected.", self)

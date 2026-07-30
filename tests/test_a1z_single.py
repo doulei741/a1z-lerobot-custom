@@ -166,6 +166,48 @@ def test_single_robot_returns_actual_sent_action_and_default_disconnect_does_not
     assert arm.stop_calls == 1
 
 
+def test_gripper_start_hold_keeps_follower_open_until_leader_moves(monkeypatch, tmp_path):
+    import a1z_lerobot.robots.a1z_single.a1z_single as robot_module
+    from a1z_lerobot.robots.a1z_single.config_a1z_single import A1ZSingleConfig
+
+    follower_start = np.array([0, 0, 0, 0, 0, 0, 0.98], dtype=np.float32)
+
+    class FakeArm:
+        def __init__(self, can_channel):
+            self.command = None
+
+        def start(self):
+            pass
+
+        def get_state_normalized(self):
+            return follower_start.copy()
+
+        def send_command_normalized(self, command):
+            self.command = command.copy()
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(robot_module, "A1ZArm", FakeArm)
+    robot = robot_module.A1ZSingle(
+        A1ZSingleConfig(
+            id="single",
+            calibration_dir=tmp_path,
+            cameras={},
+            ema_alpha=1.0,
+            max_joint_delta=0.1,
+            gripper_start_hold=True,
+        )
+    )
+    robot.connect()
+
+    first_sent = robot.send_action(make_action(0, 0, 0, 0, 0, 0, 0.69))
+    second_sent = robot.send_action(make_action(0, 0, 0, 0, 0, 0, 0.59))
+
+    assert first_sent["gripper.pos"] == pytest.approx(0.98)
+    assert second_sent["gripper.pos"] == pytest.approx(0.88)
+
+
 def test_single_robot_stops_arm_even_if_camera_disconnect_fails(monkeypatch, tmp_path):
     import a1z_lerobot.robots.a1z_single.a1z_single as robot_module
     from a1z_lerobot.robots.a1z_single.config_a1z_single import A1ZSingleConfig

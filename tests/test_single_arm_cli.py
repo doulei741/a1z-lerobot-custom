@@ -80,7 +80,12 @@ def test_record_yaml_decodes_to_complete_single_arm_rgb_configuration():
     )
 
     assert config.robot.type == "a1z_single"
+    assert config.robot.gripper_start_hold is True
     assert config.teleop.type == "a1z_leader"
+    assert config.teleop.joint_signs == (-1, -1, -1, 1, 1, -1)
+    assert config.teleop.joint_offsets_rad == pytest.approx(
+        (-0.040418965, -1.556060913, 1.709433057, -0.144229406, -0.011507665, -0.016411362)
+    )
     assert config.dataset.single_task
     assert list(config.robot.cameras) == ["top_rgb", "wrist_rgb"]
     for camera in config.robot.cameras.values():

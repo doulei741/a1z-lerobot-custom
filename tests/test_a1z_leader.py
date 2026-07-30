@@ -46,7 +46,10 @@ def test_leader_default_mapping_reverses_first_and_sixth_joint():
 
     config = A1ZLeaderConfig(port="/dev/ttyACM0")
 
-    assert config.joint_signs == (-1.0, 1.0, 1.0, 1.0, 1.0, -1.0)
+    assert config.joint_signs == (-1.0, -1.0, -1.0, 1.0, 1.0, -1.0)
+    assert config.joint_offsets_rad == pytest.approx(
+        (-0.040418965, -1.556060913, 1.709433057, -0.144229406, -0.011507665, -0.016411362)
+    )
 
 
 @pytest.mark.parametrize(
@@ -130,7 +133,7 @@ def test_a1z_leader_uses_motor_ids_one_through_seven_and_emits_mapped_action(mon
         "arm_5.pos",
         "gripper.pos",
     ]
-    assert action["arm_5.pos"] == pytest.approx(-math.radians(50))
+    assert action["arm_5.pos"] == pytest.approx(-math.radians(50) - 0.016411362)
     assert action["gripper.pos"] == pytest.approx(0.75)
 
 

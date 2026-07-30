@@ -21,15 +21,16 @@ robot:
       use_depth: false
   ema_alpha: 0.3
   max_joint_delta: 0.05
+  gripper_start_hold: true
   return_home_on_disconnect: false
 
 teleop:
   type: a1z_leader
   id: a1z_leader
   port: /dev/ttyACM0
-  joint_signs: [-1, 1, 1, 1, 1, -1]
+  joint_signs: [-1, -1, -1, 1, 1, -1]
   joint_scales: [1, 1, 1, 1, 1, 1]
-  joint_offsets_rad: [0, 0, 0, 0, 0, 0]
+  joint_offsets_rad: [-0.040418965, -1.556060913, 1.709433057, -0.144229406, -0.011507665, -0.016411362]
 
 dataset:
   repo_id: local/a1z_single
