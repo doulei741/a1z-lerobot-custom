@@ -73,6 +73,25 @@ def process_single_action(
     return sent.astype(np.float32)
 
 
+def rebase_relative_action(
+    action: Mapping[str, float],
+    *,
+    leader_reference: Mapping[str, float],
+    follower_reference: np.ndarray,
+) -> dict[str, float]:
+    """Map Leader deltas from its start pose onto the A1Z start pose."""
+    for values in (action, leader_reference):
+        if set(values) != set(ACTION_KEYS):
+            raise ValueError(f"action keys must be exactly {list(ACTION_KEYS)}")
+    follower_reference = np.asarray(follower_reference, dtype=np.float32)
+    if follower_reference.shape != (7,) or not np.isfinite(follower_reference).all():
+        raise ValueError("follower reference must contain seven finite values")
+    return {
+        key: float(follower_reference[index] + float(action[key]) - float(leader_reference[key]))
+        for index, key in enumerate(ACTION_KEYS)
+    }
+
+
 class A1ZSingle(Robot):
     """LeRobot Robot adapter for one six-joint A1Z arm and normalized gripper."""
 
@@ -87,6 +106,8 @@ class A1ZSingle(Robot):
         self.arm: A1ZArm | None = None
         self._connected = False
         self._previous_action: np.ndarray | None = None
+        self._relative_leader_reference: dict[str, float] | None = None
+        self._relative_follower_reference: np.ndarray | None = None
 
     @property
     def _motors_ft(self) -> dict[str, type]:
@@ -134,6 +155,8 @@ class A1ZSingle(Robot):
                 camera.connect()
                 connected_cameras.append(camera)
             self._previous_action = self.arm.get_state_normalized()
+            self._relative_leader_reference = None
+            self._relative_follower_reference = self._previous_action.copy()
             self._connected = True
         except Exception:
             for camera in reversed(connected_cameras):
@@ -155,6 +178,14 @@ class A1ZSingle(Robot):
 
     @check_if_not_connected
     def send_action(self, action: RobotAction) -> RobotAction:
+        if self.config.relative_action_reference:
+            if self._relative_leader_reference is None:
+                self._relative_leader_reference = {key: float(action[key]) for key in ACTION_KEYS}
+            action = rebase_relative_action(
+                action,
+                leader_reference=self._relative_leader_reference,
+                follower_reference=self._relative_follower_reference,
+            )
         sent = process_single_action(
             action,
             previous=self._previous_action,
@@ -190,6 +221,8 @@ class A1ZSingle(Robot):
             self.arm = None
             self._connected = False
             self._previous_action = None
+            self._relative_leader_reference = None
+            self._relative_follower_reference = None
         if first_error is not None:
             raise first_error
         logger.info("%s disconnected.", self)

@@ -21,6 +21,7 @@ robot:
       use_depth: false
   ema_alpha: 0.3
   max_joint_delta: 0.05
+  relative_action_reference: true
   return_home_on_disconnect: false
 
 teleop:

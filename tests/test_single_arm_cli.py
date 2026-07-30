@@ -80,6 +80,7 @@ def test_record_yaml_decodes_to_complete_single_arm_rgb_configuration():
     )
 
     assert config.robot.type == "a1z_single"
+    assert config.robot.relative_action_reference is True
     assert config.teleop.type == "a1z_leader"
     assert config.dataset.single_task
     assert list(config.robot.cameras) == ["top_rgb", "wrist_rgb"]

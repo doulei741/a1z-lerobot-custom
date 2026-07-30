@@ -65,6 +65,21 @@ def test_process_single_action_applies_a1z_physical_joint_limits():
     assert sent.tolist() == pytest.approx([-2.094, 0.0, 0.0, 1.484, 1.484, 2.007, 0.0])
 
 
+def test_rebase_relative_action_holds_follower_pose_when_leader_has_not_moved():
+    from a1z_lerobot.robots.a1z_single.a1z_single import rebase_relative_action
+
+    leader_start = make_action(-0.05, -1.18, 1.69, -0.02, -0.06, 1.50, 0.50)
+    follower_start = np.array([-0.02, 0.01, 0.01, -0.01, 0.0, 0.0, 1.0], dtype=np.float32)
+
+    rebased = rebase_relative_action(
+        leader_start,
+        leader_reference=leader_start,
+        follower_reference=follower_start,
+    )
+
+    assert list(rebased.values()) == pytest.approx(follower_start)
+
+
 @pytest.mark.parametrize(
     "action",
     [
@@ -164,6 +179,49 @@ def test_single_robot_returns_actual_sent_action_and_default_disconnect_does_not
     assert arm.command.tolist() == pytest.approx(expected)
     assert arm.home_calls == 0
     assert arm.stop_calls == 1
+
+
+def test_relative_action_reference_holds_a1z_pose_until_leader_moves(monkeypatch, tmp_path):
+    import a1z_lerobot.robots.a1z_single.a1z_single as robot_module
+    from a1z_lerobot.robots.a1z_single.config_a1z_single import A1ZSingleConfig
+
+    follower_start = np.array([-0.02, 0.01, -0.01, 0.02, -0.02, 0.03, 0.75], dtype=np.float32)
+
+    class FakeArm:
+        def __init__(self, can_channel):
+            self.commands = []
+
+        def start(self):
+            pass
+
+        def get_state_normalized(self):
+            return follower_start.copy()
+
+        def send_command_normalized(self, command):
+            self.commands.append(command.copy())
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(robot_module, "A1ZArm", FakeArm)
+    robot = robot_module.A1ZSingle(
+        A1ZSingleConfig(
+            id="single",
+            calibration_dir=tmp_path,
+            cameras={},
+            ema_alpha=1.0,
+            max_joint_delta=0.1,
+            relative_action_reference=True,
+        )
+    )
+    robot.connect()
+
+    leader_start = make_action(-0.05, -1.18, 1.69, -0.02, -0.06, 1.50, 0.50)
+    first_sent = robot.send_action(leader_start)
+    second_sent = robot.send_action(make_action(-0.05, -1.18, 1.69, -0.02, -0.06, 1.55, 0.50))
+
+    assert list(first_sent.values()) == pytest.approx(follower_start)
+    assert second_sent["arm_5.pos"] == pytest.approx(follower_start[5] + 0.05)
 
 
 def test_single_robot_stops_arm_even_if_camera_disconnect_fails(monkeypatch, tmp_path):
