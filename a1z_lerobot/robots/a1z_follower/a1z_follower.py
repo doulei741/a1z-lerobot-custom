@@ -24,6 +24,7 @@ joint keys carry a `.pos` suffix (rollout engine keeps only .pos joint keys).
 import logging
 import os
 import time
+from collections.abc import Mapping
 from functools import cached_property
 
 import numpy as np
@@ -40,6 +41,36 @@ from .config_a1z_follower import A1ZConfig
 from .utils import apply_ema, clip_joint_delta
 
 logger = logging.getLogger(__name__)
+
+
+def validate_policy_features(
+    policy_config, camera_features: Mapping[str, tuple[int, int, int]]
+) -> None:
+    """Fail before hardware connection when a policy does not match dual A1Z I/O."""
+    state_feature = policy_config.input_features.get("observation.state")
+    if state_feature is None or tuple(state_feature.shape) != (14,):
+        shape = None if state_feature is None else tuple(state_feature.shape)
+        raise ValueError(f"policy state shape must be (14,), got {shape}")
+
+    action_feature = policy_config.output_features.get("action")
+    if action_feature is None or tuple(action_feature.shape) != (14,):
+        shape = None if action_feature is None else tuple(action_feature.shape)
+        raise ValueError(f"policy action shape must be (14,), got {shape}")
+
+    expected_visuals = {
+        key: tuple(feature.shape)
+        for key, feature in policy_config.input_features.items()
+        if key.startswith("observation.images.")
+    }
+    provided_visuals = {
+        f"observation.images.{name}": (shape[2], shape[0], shape[1])
+        for name, shape in camera_features.items()
+    }
+    if expected_visuals != provided_visuals:
+        raise ValueError(
+            "policy visual features must exactly match the configured cameras: "
+            f"policy={expected_visuals}, robot={provided_visuals}"
+        )
 
 
 class A1Z(Robot):
@@ -92,6 +123,9 @@ class A1Z(Robot):
     def configure(self) -> None:
         # A1Z motor configuration is handled by the GALAXEA SDK; nothing to do here.
         pass
+
+    def validate_policy_features(self, policy_config) -> None:
+        validate_policy_features(policy_config, self._cameras_ft)
 
     @check_if_already_connected
     def connect(self, calibrate: bool = True) -> None:
