@@ -4,16 +4,7 @@ import draccus
 import pytest
 
 
-CAMERA_OVERRIDE = (
-    '--robot.cameras={"top_rgb":{"type":"intelrealsense",'
-    '"serial_number_or_name":"025222071608","width":640,"height":480,"fps":30,'
-    '"color_mode":"rgb","use_depth":false},"left_wrist_rgb":'
-    '{"type":"intelrealsense","serial_number_or_name":"260522273365",'
-    '"width":640,"height":480,"fps":30,"color_mode":"rgb","use_depth":false},'
-    '"right_wrist_rgb":{"type":"intelrealsense",'
-    '"serial_number_or_name":"123456789012","width":640,"height":480,"fps":30,'
-    '"color_mode":"rgb","use_depth":false}}'
-)
+RIGHT_D405_OVERRIDE = "--robot.right_wrist_serial=123456789012"
 
 
 def test_record_yaml_decodes_complete_dual_arm_rgb_configuration():
@@ -27,7 +18,7 @@ def test_record_yaml_decodes_complete_dual_arm_rgb_configuration():
         config_class=RecordConfig,
         args=[
             "--config_path=a1z_lerobot/configs/record_a1z_dual_realsense.yaml",
-            CAMERA_OVERRIDE,
+            RIGHT_D405_OVERRIDE,
         ],
     )
 
@@ -36,6 +27,7 @@ def test_record_yaml_decodes_complete_dual_arm_rgb_configuration():
     assert config.robot.gripper_start_hold is True
     assert config.robot.return_home_on_disconnect is False
     assert config.robot.open_grippers_on_disconnect is False
+    assert config.robot.right_wrist_serial == "123456789012"
     assert config.teleop.type == "bi_a1z_leader"
     assert config.teleop.left_id == "a1z_left_leader"
     assert config.teleop.right_id == "a1z_right_leader"

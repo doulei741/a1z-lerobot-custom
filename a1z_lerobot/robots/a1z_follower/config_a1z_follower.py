@@ -16,6 +16,9 @@ class A1ZConfig(RobotConfig):
     # Camera configs; keys must match the training dataset's observation.images.*
     cameras: dict[str, CameraConfig] = field(default_factory=dict)
 
+    # Short CLI override for the hardware-specific second D405 serial.
+    right_wrist_serial: str | None = None
+
     # EMA smoothing factor: out = alpha*new + (1-alpha)*prev; alpha=1 means no smoothing
     ema_alpha: float = 0.3
 
@@ -36,6 +39,9 @@ class A1ZConfig(RobotConfig):
         for name, camera in self.cameras.items():
             serial = getattr(camera, "serial_number_or_name", None)
             if serial == "CONFIGURE_RIGHT_D405_SERIAL":
-                raise ValueError(
-                    f"{name} requires the detected right D405 serial before hardware connection"
-                )
+                if not self.right_wrist_serial:
+                    raise ValueError(
+                        f"{name} requires the detected right D405 serial; pass "
+                        "--robot.right_wrist_serial=SERIAL before hardware connection"
+                    )
+                camera.serial_number_or_name = self.right_wrist_serial
