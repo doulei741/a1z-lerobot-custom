@@ -75,6 +75,30 @@ a1z-calibrate-leader --port=/dev/ttyACM1 --id=a1z_right_leader
 更换 Leader 后使用新的 ID，例如 `a1z_left_leader_02`，不要覆盖已经验收的校准文件。
 同一条 Leader 的 ID 1–7 不需要更改；左右 Leader 的端口必须不同。
 
+### Leader 与 Follower 的一次性零位配对
+
+STS3215 行程标定只建立 Leader 自身的角度坐标，不能自动得知对应 A1Z Follower 的
+编码器零位。每套新的 Leader/Follower 组合在两臂摆成相同姿态后，需要计算一次独立的
+`joint_offsets_rad`：
+
+```text
+offset = Follower 当前六轴角度 - Leader 经 signs/scales 转换后的六轴角度
+```
+
+配对结果可重复用于以后开机、遥控、录制和推理，无需每次计算。只有更换或重新标定
+Leader、更换 Follower、拆装关节导致机械零位变化时才重新配对。不要通过修改
+Leader calibration JSON 来补偿 A1Z 零位。
+
+当前这套左右硬件在 2026-08-10 的配对结果是：
+
+```text
+left:  [0.185504249, -1.676119148, -1.985360469, 0.471459368, 0.061374215, 0.089759790]
+right: [-0.097389546, -1.672050437, -1.971852804, 0.520146476, -0.038316864, -0.021480975]
+```
+
+这些数值只属于当前两条已标定 Leader 与当前两个 Follower 的配对，不应复制到另一套
+硬件。
+
 ## 3. 五秒无相机低速遥控验收
 
 先清空机械臂周围空间并准备急停。两条 Leader 和 Follower 摆到对应的安全姿态，运行：
@@ -101,16 +125,22 @@ a1z-teleoperate-dual \
   --teleop.right_arm_config.joint_signs='[-1,1,1,1,1,-1]' \
   --teleop.left_arm_config.joint_scales='[1,1,1,1,1,1]' \
   --teleop.right_arm_config.joint_scales='[1,1,1,1,1,1]' \
-  --teleop.left_arm_config.joint_offsets_rad='[-0.040418965,1.567886653,-1.698370257,-0.144229406,-0.011507665,-0.016411362]' \
-  --teleop.right_arm_config.joint_offsets_rad='[-0.040418965,1.567886653,-1.698370257,-0.144229406,-0.011507665,-0.016411362]' \
+  --teleop.left_arm_config.joint_offsets_rad='[0.185504249,-1.676119148,-1.985360469,0.471459368,0.061374215,0.089759790]' \
+  --teleop.right_arm_config.joint_offsets_rad='[-0.097389546,-1.672050437,-1.971852804,0.520146476,-0.038316864,-0.021480975]' \
   --fps=30 \
-  --teleop_time_s=5
+  --teleop_time_s=2
 ```
 
-一次只小幅移动一个关节，逐轴确认方向、零位和夹爪。新的一对 Leader/Follower 若机械
-装配零位不同，只调整对应侧的 `joint_signs`、`joint_scales` 和
+第一次先运行两秒且不要移动 Leader，确认两个 Follower 没有起始跳变；之后改为五秒，
+一次只小幅移动一个关节，逐轴确认方向、零位和夹爪。方向错误才调整对应侧的
+`joint_signs`，比例误差才调整 `joint_scales`，零位误差调整
 `joint_offsets_rad`，不要改动作转换代码。确认后可把 `max_joint_delta` 提高到
 `0.02`，最终根据现场响应逐步提高，但不建议直接跳到大值。
+
+若出现 `Gripper home timed out`，先检查对应 Follower 夹爪是否被物体、线材或机械限位
+阻挡，再进行录制。退出时只按一次 `Ctrl+C` 并等待两条 A1Z 完成失能；连续按第二次会
+中断断电清理，并可能出现 `SocketcanBus was not properly shut down`。设置了
+`--teleop_time_s` 时优先等待程序自然退出。
 
 ## 4. 三路 RGB 与 Rerun 一集验证
 
@@ -211,9 +241,10 @@ rollout 会在连接并发送策略动作前验证 checkpoint：状态 `(14,)`�
 1. 记录两个新 Leader 的稳定串口；两个串口不能相同。
 2. 使用新的唯一校准 ID 分别执行 `a1z-calibrate-leader`。
 3. 确认两个 CAN 接口及左右对应关系。
-4. 探测三台相机序列号；将第二台 D405 通过 `--robot.right_wrist_serial` 传入。
-5. `max_joint_delta=0.01`、无相机、五秒逐轴验证；左右映射独立调整。
-6. 录制一个全新目录的十秒 episode，并检查 Rerun 与数据特征。
-7. 才开始正式采集、训练和推理。
+4. 让每组 Leader/Follower 处于相同姿态，读取双方六轴并计算该组合独立的 offset。
+5. `max_joint_delta=0.01`、无相机、两秒静止验证；无起始跳变后再做五秒逐轴验证。
+6. 探测三台相机序列号；将第二台 D405 通过 `--robot.right_wrist_serial` 传入。
+7. 录制一个全新目录的十秒 episode，并检查 Rerun 与数据特征。
+8. 才开始正式采集、训练和推理。
 
 不要复用另一套实体 Leader 的校准 ID，也不要在未确认左右 CAN 对应关系时运行双臂。
