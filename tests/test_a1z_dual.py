@@ -277,3 +277,75 @@ def test_dual_robot_rejects_nonfinite_action_before_sending(monkeypatch, tmp_pat
         robot.send_action(action)
 
     assert robot.arm.send_calls == 0
+
+
+def test_dual_joint_limits_are_applied_before_command_history(monkeypatch, tmp_path):
+    import a1z_lerobot.robots.a1z_follower.a1z_follower as module
+    from a1z_lerobot.robots.a1z_follower.config_a1z_follower import A1ZConfig
+
+    class FakeDualArm:
+        def __init__(self, left_can, right_can):
+            self.commands = []
+
+        def start(self):
+            pass
+
+        def get_state(self):
+            return np.zeros(14, dtype=np.float32)
+
+        def send_command(self, command):
+            self.commands.append(command.copy())
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr(module, "A1ZDualArm", FakeDualArm)
+    robot = module.A1Z(
+        A1ZConfig(
+            id="dual",
+            calibration_dir=tmp_path,
+            cameras={},
+            ema_alpha=1.0,
+            max_joint_delta=0.1,
+            gripper_start_hold=False,
+        )
+    )
+    robot.connect()
+
+    invalid = make_action(0.0, 0.0)
+    invalid.update(
+        {
+            "left_arm_1.pos": -1.0,
+            "left_arm_2.pos": 1.0,
+            "right_arm_1.pos": -1.0,
+            "right_arm_2.pos": 1.0,
+        }
+    )
+    first = robot.send_action(invalid)
+
+    valid = make_action(0.0, 0.0)
+    valid.update(
+        {
+            "left_arm_1.pos": 0.1,
+            "left_arm_2.pos": -0.1,
+            "right_arm_1.pos": 0.1,
+            "right_arm_2.pos": -0.1,
+        }
+    )
+    second = robot.send_action(valid)
+
+    assert [first[key] for key in ("left_arm_1.pos", "left_arm_2.pos")] == pytest.approx(
+        [0.0, 0.0]
+    )
+    assert [first[key] for key in ("right_arm_1.pos", "right_arm_2.pos")] == pytest.approx(
+        [0.0, 0.0]
+    )
+    assert [second[key] for key in ("left_arm_1.pos", "left_arm_2.pos")] == pytest.approx(
+        [0.1, -0.1]
+    )
+    assert [second[key] for key in ("right_arm_1.pos", "right_arm_2.pos")] == pytest.approx(
+        [0.1, -0.1]
+    )
+    assert robot.arm.commands[-1] == pytest.approx(
+        np.array([second[key] for key in MOTOR_KEYS], dtype=np.float32)
+    )

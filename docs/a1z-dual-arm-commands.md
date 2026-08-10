@@ -86,11 +86,12 @@ offset = Follower 当前六轴角度 - Leader 经 signs/scales 转换后的六�
 Leader、更换 Follower、拆装关节导致机械零位变化时才重新配对。不要通过修改
 Leader calibration JSON 来补偿 A1Z 零位。
 
-当前这套左右硬件在 2026-08-10 的配对结果是：
+当前这套左右硬件在 2026-08-11 修正二轴方向后的配对结果是：
 
 ```text
-left:  [0.185504249, -1.676119148, -1.985360469, 0.471459368, 0.061374215, 0.089759790]
-right: [-0.097389546, -1.672050437, -1.971852804, 0.520146476, -0.038316864, -0.021480975]
+signs: [-1, -1, 1, 1, 1, -1]
+left:  [0.185504249, 1.676119148, -1.985360469, 0.471459368, 0.061374215, 0.089759790]
+right: [-0.097389546, 1.672050437, -1.971852804, 0.520146476, -0.038316864, -0.021480975]
 ```
 
 这些数值只属于当前两条已标定 Leader 与当前两个 Follower 的配对，不应复制到另一套
@@ -156,12 +157,12 @@ a1z-teleoperate-dual \
   --teleop.right_id=a1z_right_leader \
   --teleop.left_arm_config.port=/dev/ttyACM0 \
   --teleop.right_arm_config.port=/dev/ttyACM1 \
-  --teleop.left_arm_config.joint_signs='[-1,1,1,1,1,-1]' \
-  --teleop.right_arm_config.joint_signs='[-1,1,1,1,1,-1]' \
+  --teleop.left_arm_config.joint_signs='[-1,-1,1,1,1,-1]' \
+  --teleop.right_arm_config.joint_signs='[-1,-1,1,1,1,-1]' \
   --teleop.left_arm_config.joint_scales='[1,1,1,1,1,1]' \
   --teleop.right_arm_config.joint_scales='[1,1,1,1,1,1]' \
-  --teleop.left_arm_config.joint_offsets_rad='[0.185504249,-1.676119148,-1.985360469,0.471459368,0.061374215,0.089759790]' \
-  --teleop.right_arm_config.joint_offsets_rad='[-0.097389546,-1.672050437,-1.971852804,0.520146476,-0.038316864,-0.021480975]' \
+  --teleop.left_arm_config.joint_offsets_rad='[0.185504249,1.676119148,-1.985360469,0.471459368,0.061374215,0.089759790]' \
+  --teleop.right_arm_config.joint_offsets_rad='[-0.097389546,1.672050437,-1.971852804,0.520146476,-0.038316864,-0.021480975]' \
   --fps=30
 ```
 
@@ -197,12 +198,12 @@ a1z-teleoperate-dual \
   --teleop.right_id=a1z_right_leader \
   --teleop.left_arm_config.port=/dev/ttyACM0 \
   --teleop.right_arm_config.port=/dev/ttyACM1 \
-  --teleop.left_arm_config.joint_signs='[-1,1,1,1,1,-1]' \
-  --teleop.right_arm_config.joint_signs='[-1,1,1,1,1,-1]' \
+  --teleop.left_arm_config.joint_signs='[-1,-1,1,1,1,-1]' \
+  --teleop.right_arm_config.joint_signs='[-1,-1,1,1,1,-1]' \
   --teleop.left_arm_config.joint_scales='[1,1,1,1,1,1]' \
   --teleop.right_arm_config.joint_scales='[1,1,1,1,1,1]' \
-  --teleop.left_arm_config.joint_offsets_rad='[0.185504249,-1.676119148,-1.985360469,0.471459368,0.061374215,0.089759790]' \
-  --teleop.right_arm_config.joint_offsets_rad='[-0.097389546,-1.672050437,-1.971852804,0.520146476,-0.038316864,-0.021480975]' \
+  --teleop.left_arm_config.joint_offsets_rad='[0.185504249,1.676119148,-1.985360469,0.471459368,0.061374215,0.089759790]' \
+  --teleop.right_arm_config.joint_offsets_rad='[-0.097389546,1.672050437,-1.971852804,0.520146476,-0.038316864,-0.021480975]' \
   --fps=30 \
   --display_data=true \
   --display_compressed_images=false

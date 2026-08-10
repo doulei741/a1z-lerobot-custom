@@ -33,11 +33,13 @@ def test_record_yaml_decodes_complete_dual_arm_rgb_configuration():
     assert config.teleop.right_id == "a1z_right_leader"
     assert config.teleop.left_arm_config.port == "/dev/ttyACM0"
     assert config.teleop.right_arm_config.port == "/dev/ttyACM1"
+    assert config.teleop.left_arm_config.joint_signs == (-1, -1, 1, 1, 1, -1)
+    assert config.teleop.right_arm_config.joint_signs == (-1, -1, 1, 1, 1, -1)
     assert config.teleop.left_arm_config.joint_offsets_rad == pytest.approx(
-        (0.185504249, -1.676119148, -1.985360469, 0.471459368, 0.061374215, 0.089759790)
+        (0.185504249, 1.676119148, -1.985360469, 0.471459368, 0.061374215, 0.089759790)
     )
     assert config.teleop.right_arm_config.joint_offsets_rad == pytest.approx(
-        (-0.097389546, -1.672050437, -1.971852804, 0.520146476, -0.038316864, -0.021480975)
+        (-0.097389546, 1.672050437, -1.971852804, 0.520146476, -0.038316864, -0.021480975)
     )
     assert list(config.robot.cameras) == ["top_rgb", "left_wrist_rgb", "right_wrist_rgb"]
     assert config.robot.cameras["right_wrist_rgb"].serial_number_or_name == "123456789012"

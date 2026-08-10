@@ -35,12 +35,13 @@ from lerobot.types import RobotAction, RobotObservation
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
 from a1z.robots.gripper import GRIPPER_CLOSE_RAD, GRIPPER_OPEN_RAD
 
-from .hardware.config import A1Z_DUAL
+from .hardware.config import A1Z_DUAL, A1Z_JOINT_LIMITS
 from .hardware.dual_arm import A1ZDualArm
 from .config_a1z_follower import A1ZConfig
 from .utils import apply_ema, clip_joint_delta
 
 logger = logging.getLogger(__name__)
+JOINT_LIMITS = np.asarray(A1Z_JOINT_LIMITS, dtype=np.float32)
 
 
 def validate_policy_features(
@@ -236,6 +237,10 @@ class A1Z(Robot):
                 )
         smoothed = apply_ema(target, self._prev_action, self.config.ema_alpha)
         clipped = clip_joint_delta(smoothed, self._prev_action, self.config.max_joint_delta)
+        for start in (0, 7):
+            clipped[start : start + 6] = np.clip(
+                clipped[start : start + 6], JOINT_LIMITS[:, 0], JOINT_LIMITS[:, 1]
+            )
         self._maybe_log_action_debug(target, clipped)
         self._prev_action = clipped.copy()
         self.arm.send_command(clipped)
