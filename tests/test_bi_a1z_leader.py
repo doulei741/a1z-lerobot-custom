@@ -52,20 +52,20 @@ def test_compose_dual_action_rejects_invalid_single_leader_actions(broken):
 
 
 def test_dual_leader_config_requires_independent_serial_buses():
-    from a1z_lerobot.teleoperators.a1z_leader import A1ZLeaderConfig
+    from a1z_lerobot.teleoperators.a1z_leader import A1ZLeaderConfigBase
     from a1z_lerobot.teleoperators.bi_a1z_leader import BiA1ZLeaderConfig
 
     with pytest.raises(ValueError, match="different serial ports"):
         BiA1ZLeaderConfig(
             id="dual",
-            left_arm_config=A1ZLeaderConfig(id="left", port="/dev/ttyACM0"),
-            right_arm_config=A1ZLeaderConfig(id="right", port="/dev/ttyACM0"),
+            left_arm_config=A1ZLeaderConfigBase(port="/dev/ttyACM0"),
+            right_arm_config=A1ZLeaderConfigBase(port="/dev/ttyACM0"),
         )
 
 
 def test_dual_leader_preserves_independent_child_configuration(monkeypatch):
     import a1z_lerobot.teleoperators.bi_a1z_leader.bi_a1z_leader as module
-    from a1z_lerobot.teleoperators.a1z_leader import A1ZLeaderConfig
+    from a1z_lerobot.teleoperators.a1z_leader import A1ZLeaderConfigBase
     from a1z_lerobot.teleoperators.bi_a1z_leader import BiA1ZLeader, BiA1ZLeaderConfig
 
     created = []
@@ -105,13 +105,13 @@ def test_dual_leader_preserves_independent_child_configuration(monkeypatch):
     monkeypatch.setattr(module, "A1ZLeader", FakeLeader)
     config = BiA1ZLeaderConfig(
         id="dual",
-        left_arm_config=A1ZLeaderConfig(
-            id="left_leader",
+        left_id="left_leader",
+        right_id="right_leader",
+        left_arm_config=A1ZLeaderConfigBase(
             port="/dev/ttyACM0",
             joint_signs=(-1, 1, 1, 1, 1, -1),
         ),
-        right_arm_config=A1ZLeaderConfig(
-            id="right_leader",
+        right_arm_config=A1ZLeaderConfigBase(
             port="/dev/ttyACM1",
             joint_signs=(1, -1, -1, 1, 1, 1),
         ),
@@ -133,7 +133,7 @@ def test_dual_leader_preserves_independent_child_configuration(monkeypatch):
 
 def test_dual_leader_cleans_up_left_when_right_connection_fails(monkeypatch):
     import a1z_lerobot.teleoperators.bi_a1z_leader.bi_a1z_leader as module
-    from a1z_lerobot.teleoperators.a1z_leader import A1ZLeaderConfig
+    from a1z_lerobot.teleoperators.a1z_leader import A1ZLeaderConfigBase
     from a1z_lerobot.teleoperators.bi_a1z_leader import BiA1ZLeader, BiA1ZLeaderConfig
 
     events = []
@@ -161,8 +161,10 @@ def test_dual_leader_cleans_up_left_when_right_connection_fails(monkeypatch):
     leader = BiA1ZLeader(
         BiA1ZLeaderConfig(
             id="dual",
-            left_arm_config=A1ZLeaderConfig(id="left", port="/dev/ttyACM0"),
-            right_arm_config=A1ZLeaderConfig(id="right", port="/dev/ttyACM1"),
+            left_id="left",
+            right_id="right",
+            left_arm_config=A1ZLeaderConfigBase(port="/dev/ttyACM0"),
+            right_arm_config=A1ZLeaderConfigBase(port="/dev/ttyACM1"),
         )
     )
 

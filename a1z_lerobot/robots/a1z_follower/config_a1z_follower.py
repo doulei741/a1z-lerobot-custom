@@ -28,3 +28,14 @@ class A1ZConfig(RobotConfig):
     # Exit movement is opt-in for dual-arm safety.
     return_home_on_disconnect: bool = False
     open_grippers_on_disconnect: bool = False
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.left_can == self.right_can:
+            raise ValueError("left and right A1Z followers must use different CAN interfaces")
+        for name, camera in self.cameras.items():
+            serial = getattr(camera, "serial_number_or_name", None)
+            if serial == "CONFIGURE_RIGHT_D405_SERIAL":
+                raise ValueError(
+                    f"{name} requires the detected right D405 serial before hardware connection"
+                )

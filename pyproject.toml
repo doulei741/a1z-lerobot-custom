@@ -25,6 +25,10 @@ a1z-teleoperate-single = "a1z_lerobot.scripts.teleoperate_single:main"
 a1z-record-single = "a1z_lerobot.scripts.record_single:main"
 a1z-train-act-single = "a1z_lerobot.scripts.train_act_single:main"
 a1z-rollout-act-single = "a1z_lerobot.scripts.rollout_act_single:main"
+a1z-teleoperate-dual = "a1z_lerobot.scripts.teleoperate_dual:main"
+a1z-record-dual = "a1z_lerobot.scripts.record_dual:main"
+a1z-train-act-dual = "a1z_lerobot.scripts.train_act_dual:main"
+a1z-rollout-act-dual = "a1z_lerobot.scripts.rollout_act_dual:main"
 
 [tool.flit.module]
 name = "a1z_lerobot"

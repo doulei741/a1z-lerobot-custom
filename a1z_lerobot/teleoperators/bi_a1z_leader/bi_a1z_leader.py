@@ -8,7 +8,7 @@ from lerobot.types import RobotAction
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
 
 from ...robots.a1z_follower.hardware.config import A1Z_DUAL
-from ..a1z_leader import A1ZLeader
+from ..a1z_leader import A1ZLeader, A1ZLeaderConfig
 from ..a1z_leader.a1z_leader import ACTION_KEYS as SINGLE_ACTION_KEYS
 from .config_bi_a1z_leader import BiA1ZLeaderConfig
 
@@ -49,8 +49,18 @@ class BiA1ZLeader(Teleoperator):
     def __init__(self, config: BiA1ZLeaderConfig):
         super().__init__(config)
         self.config = config
-        self.left_arm = A1ZLeader(config.left_arm_config)
-        self.right_arm = A1ZLeader(config.right_arm_config)
+        self.left_arm = A1ZLeader(self._child_config(config.left_id, config.left_arm_config))
+        self.right_arm = A1ZLeader(self._child_config(config.right_id, config.right_arm_config))
+
+    def _child_config(self, leader_id, arm_config) -> A1ZLeaderConfig:
+        return A1ZLeaderConfig(
+            id=leader_id,
+            calibration_dir=self.config.calibration_dir,
+            port=arm_config.port,
+            joint_signs=arm_config.joint_signs,
+            joint_scales=arm_config.joint_scales,
+            joint_offsets_rad=arm_config.joint_offsets_rad,
+        )
 
     @cached_property
     def action_features(self) -> dict[str, type]:

@@ -1,13 +1,9 @@
 import math
 from dataclasses import dataclass
 
-from lerobot.teleoperators.config import TeleoperatorConfig
-
-
-@TeleoperatorConfig.register_subclass("a1z_leader")
 @dataclass
-class A1ZLeaderConfig(TeleoperatorConfig):
-    """Configuration for the seven-STS3215 A1Z-shaped leader arm."""
+class A1ZLeaderConfigBase:
+    """Nestable configuration for one seven-STS3215 A1Z-shaped leader."""
 
     port: str
     joint_signs: tuple[float, ...] = (-1.0, 1.0, 1.0, 1.0, 1.0, -1.0)
@@ -32,3 +28,14 @@ class A1ZLeaderConfig(TeleoperatorConfig):
             raise ValueError("joint_signs values must be non-zero")
         if any(float(value) == 0.0 for value in self.joint_scales):
             raise ValueError("joint_scales values must be non-zero")
+
+
+from lerobot.teleoperators.config import TeleoperatorConfig
+
+
+@TeleoperatorConfig.register_subclass("a1z_leader")
+@dataclass
+class A1ZLeaderConfig(TeleoperatorConfig, A1ZLeaderConfigBase):
+    """Registered LeRobot configuration for one A1Z leader."""
+
+    pass

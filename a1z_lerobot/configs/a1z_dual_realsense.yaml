@@ -1,0 +1,39 @@
+robot:
+  type: a1z
+  id: a1z_dual
+  left_can: can0
+  right_can: can1
+  cameras:
+    top_rgb:
+      type: intelrealsense
+      serial_number_or_name: "025222071608"
+      width: 640
+      height: 480
+      fps: 30
+      color_mode: rgb
+      use_depth: false
+    left_wrist_rgb:
+      type: intelrealsense
+      serial_number_or_name: "260522273365"
+      width: 640
+      height: 480
+      fps: 30
+      color_mode: rgb
+      use_depth: false
+    right_wrist_rgb:
+      type: intelrealsense
+      serial_number_or_name: "CONFIGURE_RIGHT_D405_SERIAL"
+      width: 640
+      height: 480
+      fps: 30
+      color_mode: rgb
+      use_depth: false
+  ema_alpha: 0.3
+  max_joint_delta: 0.05
+  gripper_start_hold: false
+  return_home_on_disconnect: false
+  open_grippers_on_disconnect: false
+
+fps: 30
+display_data: false
+return_to_initial_position: false
