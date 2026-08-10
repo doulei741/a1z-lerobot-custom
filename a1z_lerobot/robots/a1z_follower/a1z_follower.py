@@ -32,7 +32,7 @@ from lerobot.cameras import make_cameras_from_configs
 from lerobot.robots.robot import Robot
 from lerobot.types import RobotAction, RobotObservation
 from lerobot.utils.decorators import check_if_already_connected, check_if_not_connected
-from a1z.robots.gripper import GRIPPER_OPEN_RAD
+from a1z.robots.gripper import GRIPPER_CLOSE_RAD, GRIPPER_OPEN_RAD
 
 from .hardware.config import A1Z_DUAL
 from .hardware.dual_arm import A1ZDualArm
@@ -56,6 +56,8 @@ class A1Z(Robot):
         self.arm: A1ZDualArm | None = None
         self._connected = False
         self._prev_action: np.ndarray | None = None
+        self._gripper_leader_reference: list[float | None] = [None, None]
+        self._gripper_follower_reference: list[float | None] = [None, None]
 
     @property
     def _motors_ft(self) -> dict[str, type]:
@@ -93,31 +95,73 @@ class A1Z(Robot):
 
     @check_if_already_connected
     def connect(self, calibrate: bool = True) -> None:
-        self.arm = A1ZDualArm(self.config.left_can, self.config.right_can)
-        self.arm.start()
-        for cam in self.cameras.values():
-            cam.connect()
-        self._connected = True
-        self._prev_action = self.arm.get_state().astype(np.float32)
-        logger.info(f"{self} connected.")
+        arm = A1ZDualArm(self.config.left_can, self.config.right_can)
+        self.arm = arm
+        connected_cameras = []
+        try:
+            arm.start()
+            for camera in self.cameras.values():
+                camera.connect()
+                connected_cameras.append(camera)
+            state = arm.get_state().astype(np.float32)
+            if state.shape != (14,) or not np.isfinite(state).all():
+                raise ValueError("dual A1Z state must contain fourteen finite values")
+            self._prev_action = state
+            self._gripper_leader_reference = [None, None]
+            self._gripper_follower_reference = [float(state[6]), float(state[13])]
+            self._connected = True
+        except Exception:
+            for camera in reversed(connected_cameras):
+                try:
+                    camera.disconnect()
+                except Exception:
+                    pass
+            try:
+                arm.stop()
+            except Exception:
+                pass
+            self.arm = None
+            self._prev_action = None
+            self._gripper_follower_reference = [None, None]
+            raise
+        logger.info("%s connected.", self)
 
     @check_if_not_connected
     def disconnect(self) -> None:
-        if self.arm is not None:
-            logger.info("Opening gripper...")
-            self.arm.command_gripper(GRIPPER_OPEN_RAD)
-            time.sleep(1.5)
-            logger.info("Returning to home...")
-            try:
-                self.arm.move_to_home()
-            except Exception as e:
-                logger.warning(f"Return to home failed: {e}")
-            self.arm.disable_gripper()
-            self.arm.stop()
-        for cam in self.cameras.values():
-            cam.disconnect()
-        self._connected = False
-        logger.info(f"{self} disconnected.")
+        arm = self.arm
+        first_error: Exception | None = None
+        try:
+            for camera in reversed(list(self.cameras.values())):
+                if camera.is_connected:
+                    try:
+                        camera.disconnect()
+                    except Exception as error:
+                        first_error = first_error or error
+            if arm is not None:
+                if self.config.open_grippers_on_disconnect:
+                    try:
+                        arm.command_gripper(GRIPPER_OPEN_RAD)
+                        time.sleep(1.5)
+                    except Exception as error:
+                        first_error = first_error or error
+                if self.config.return_home_on_disconnect:
+                    try:
+                        arm.move_to_home()
+                    except Exception as error:
+                        first_error = first_error or error
+                try:
+                    arm.stop()
+                except Exception as error:
+                    first_error = first_error or error
+        finally:
+            self.arm = None
+            self._connected = False
+            self._prev_action = None
+            self._gripper_leader_reference = [None, None]
+            self._gripper_follower_reference = [None, None]
+        if first_error is not None:
+            raise first_error
+        logger.info("%s disconnected.", self)
 
     @check_if_not_connected
     def get_observation(self) -> RobotObservation:
@@ -132,17 +176,36 @@ class A1Z(Robot):
 
     @check_if_not_connected
     def send_action(self, action: RobotAction) -> RobotAction:
+        action_keys = [f"{motor}.pos" for motor in self.motors]
+        if set(action) != set(action_keys):
+            raise ValueError(f"action keys must be exactly {action_keys}")
         target = np.array(
-            [float(action[f"{motor}.pos"]) for motor in self.motors], dtype=np.float32
+            [float(action[key]) for key in action_keys], dtype=np.float32
         )
+        if target.shape != (14,) or not np.isfinite(target).all():
+            raise ValueError("dual A1Z action must contain fourteen finite values")
         if self._prev_action is None:
             self._prev_action = target
+        if self.config.gripper_start_hold:
+            lower = min(GRIPPER_CLOSE_RAD, GRIPPER_OPEN_RAD)
+            upper = max(GRIPPER_CLOSE_RAD, GRIPPER_OPEN_RAD)
+            for reference_index, action_index in enumerate((6, 13)):
+                if self._gripper_leader_reference[reference_index] is None:
+                    self._gripper_leader_reference[reference_index] = float(target[action_index])
+                follower_reference = self._gripper_follower_reference[reference_index]
+                target[action_index] = np.clip(
+                    float(follower_reference)
+                    + float(target[action_index])
+                    - float(self._gripper_leader_reference[reference_index]),
+                    lower,
+                    upper,
+                )
         smoothed = apply_ema(target, self._prev_action, self.config.ema_alpha)
         clipped = clip_joint_delta(smoothed, self._prev_action, self.config.max_joint_delta)
         self._maybe_log_action_debug(target, clipped)
         self._prev_action = clipped.copy()
         self.arm.send_command(clipped)
-        return {f"{motor}.pos": float(clipped[i]) for i, motor in enumerate(self.motors)}
+        return {key: float(clipped[i]) for i, key in enumerate(action_keys)}
 
     # --- A1Z_DEBUG ---
 

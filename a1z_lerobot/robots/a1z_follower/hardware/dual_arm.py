@@ -20,7 +20,11 @@ class A1ZDualArm:
 
     def start(self) -> None:
         self.left.start()
-        self.right.start()
+        try:
+            self.right.start()
+        except Exception:
+            self.left.stop()
+            raise
 
     def stop(self) -> None:
         self.left.stop()

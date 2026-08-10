@@ -21,3 +21,10 @@ class A1ZConfig(RobotConfig):
 
     # Per-step joint change clip (rad); <=0 disables. Joints only, grippers unclipped
     max_joint_delta: float = 0.05
+
+    # Keep both follower grippers at their measured startup positions until each leader moves.
+    gripper_start_hold: bool = True
+
+    # Exit movement is opt-in for dual-arm safety.
+    return_home_on_disconnect: bool = False
+    open_grippers_on_disconnect: bool = False
