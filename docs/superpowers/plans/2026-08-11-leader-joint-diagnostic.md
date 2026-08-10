@@ -212,14 +212,14 @@ python -m a1z_lerobot.tools.diagnose_leader_joints \
   --id=a1z_left_leader \
   --duration-s=30 \
   --threshold-rad=0.02 \
-  --joint-indices=1 2
+  --joint-indices 1 2
 
 python -m a1z_lerobot.tools.diagnose_leader_joints \
   --port=/dev/ttyACM1 \
   --id=a1z_right_leader \
   --duration-s=30 \
   --threshold-rad=0.02 \
-  --joint-indices=1 2
+  --joint-indices 1 2
 ```
 
 Explain that the operator moves physical joint 2 alone, returns it, then moves physical joint 3 alone;

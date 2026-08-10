@@ -213,3 +213,13 @@ def test_parser_has_safe_defaults_and_required_hardware_identity():
     assert args.duration_s == 30.0
     assert args.threshold_rad == 0.02
     assert args.joint_indices == [1, 2]
+
+
+def test_parser_accepts_equals_form_followed_by_additional_joint_indices():
+    parser = build_parser()
+
+    args = parser.parse_args(
+        ["--port=/dev/ttyUSB9", "--id=bench_leader", "--joint-indices=1", "2"]
+    )
+
+    assert args.joint_indices == [1, 2]

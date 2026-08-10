@@ -3,12 +3,25 @@
 import argparse
 import logging
 import math
+import sys
 import time
 from collections.abc import Callable, Sequence
 
 from a1z_lerobot.teleoperators.a1z_leader import A1ZLeader, A1ZLeaderConfig
 
 logger = logging.getLogger(__name__)
+
+
+class _CompatibleArgumentParser(argparse.ArgumentParser):
+    def parse_args(self, args=None, namespace=None):
+        raw_args = sys.argv[1:] if args is None else args
+        normalized_args = list(raw_args)
+        for index, argument in enumerate(normalized_args):
+            if argument.startswith("--joint-indices="):
+                option, value = argument.split("=", 1)
+                normalized_args[index : index + 1] = [option, value]
+                break
+        return super().parse_args(normalized_args, namespace)
 
 
 def validate_joint_indices(indices: Sequence[int]) -> tuple[int, ...]:
@@ -144,7 +157,7 @@ def run_diagnostic(
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = _CompatibleArgumentParser(
         description="Observe A1Z Leader joint deltas without connecting a Follower."
     )
     parser.add_argument("--port", required=True, help="Leader serial port.")

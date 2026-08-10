@@ -106,7 +106,7 @@ python -m a1z_lerobot.tools.diagnose_leader_joints \
   --id=a1z_left_leader \
   --duration-s=30 \
   --threshold-rad=0.02 \
-  --joint-indices=1 2
+  --joint-indices 1 2
 ```
 
 运行右 Leader：
@@ -117,7 +117,7 @@ python -m a1z_lerobot.tools.diagnose_leader_joints \
   --id=a1z_right_leader \
   --duration-s=30 \
   --threshold-rad=0.02 \
-  --joint-indices=1 2
+  --joint-indices 1 2
 ```
 
 每次先只移动物理二轴，再回到基准姿态，然后只移动物理三轴。输出中的 `J2/J3` 是当前
