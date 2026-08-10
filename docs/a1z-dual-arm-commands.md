@@ -99,7 +99,12 @@ right: [-0.097389546, -1.672050437, -1.971852804, 0.520146476, -0.038316864, -0.
 这些数值只属于当前两条已标定 Leader 与当前两个 Follower 的配对，不应复制到另一套
 硬件。
 
-## 3. 五秒无相机低速遥控验收
+## 3. 纯遥控操作（不录制数据）
+
+`a1z-teleoperate-dual` 只执行 Leader 到 Follower 的实时遥控，不创建数据集，也不写入
+episode、视频或动作数据。默认使用 `--robot.cameras='{}'`，因此不连接相机。
+
+### 无相机低速遥控验收
 
 先清空机械臂周围空间并准备急停。两条 Leader 和 Follower 摆到对应的安全姿态，运行：
 
@@ -141,6 +146,33 @@ a1z-teleoperate-dual \
 阻挡，再进行录制。退出时只按一次 `Ctrl+C` 并等待两条 A1Z 完成失能；连续按第二次会
 中断断电清理，并可能出现 `SocketcanBus was not properly shut down`。设置了
 `--teleop_time_s` 时优先等待程序自然退出。
+
+静止两秒和逐轴五秒验证均通过后，删除命令末尾的 `--teleop_time_s=2`，即可像单臂一样
+持续纯遥控；需要退出时只按一次 `Ctrl+C`，然后等待两个 Follower 完成失能。
+
+### 可选：纯遥控时追加三路相机和 Rerun
+
+启用相机仍然是纯遥控，不会录制数据。先设置右腕 D405 序列号并构造三路 RGB 480p
+相机参数：
+
+```bash
+RIGHT_D405_SERIAL=在这里填右腕D405序列号
+
+DUAL_CAMERAS="{top_rgb: {type: intelrealsense, serial_number_or_name: '025222071608', width: 640, height: 480, fps: 30, color_mode: rgb, use_depth: false}, left_wrist_rgb: {type: intelrealsense, serial_number_or_name: '260522273365', width: 640, height: 480, fps: 30, color_mode: rgb, use_depth: false}, right_wrist_rgb: {type: intelrealsense, serial_number_or_name: '$RIGHT_D405_SERIAL', width: 640, height: 480, fps: 30, color_mode: rgb, use_depth: false}}"
+```
+
+然后在上一条完整遥控命令末尾追加：
+
+```bash
+  --robot.cameras="$DUAL_CAMERAS" \
+  --display_data=true \
+  --display_compressed_images=false
+```
+
+追加的 `--robot.cameras` 位于原 `--robot.cameras='{}'` 后面，以最后一个参数为准，并
+打开三路相机；`display_data=true` 只把状态、动作和画面发送给 Rerun，不会写入
+LeRobot 数据集。训练数据采集必须使用后文的 `a1z-record-dual`，不能把纯遥控误认为
+已经录制。
 
 ## 4. 三路 RGB 与 Rerun 一集验证
 
