@@ -39,11 +39,8 @@ lerobot-find-cameras realsense
 ```
 
 已知设备：D435 顶部序列号 `025222071608`，左腕 D405 序列号
-`260522273365`。把探测到的另一台 D405 序列号记为：
-
-```bash
-RIGHT_D405_SERIAL=在这里填右腕D405序列号
-```
+`260522273365`，右腕 D405 序列号 `260522278763`。更换相机后再使用
+`lerobot-find-cameras realsense` 探测并替换下文对应序列号。
 
 双 USB-CAN 插好后启动总线。每次重启系统都要重新执行：
 
@@ -104,7 +101,7 @@ right: [-0.097389546, -1.672050437, -1.971852804, 0.520146476, -0.038316864, -0.
 `a1z-teleoperate-dual` 只执行 Leader 到 Follower 的实时遥控，不创建数据集，也不写入
 episode、视频或动作数据。默认使用 `--robot.cameras='{}'`，因此不连接相机。
 
-### 无相机低速遥控验收
+### 无相机持续遥控
 
 先清空机械臂周围空间并准备急停。两条 Leader 和 Follower 摆到对应的安全姿态，运行：
 
@@ -132,47 +129,55 @@ a1z-teleoperate-dual \
   --teleop.right_arm_config.joint_scales='[1,1,1,1,1,1]' \
   --teleop.left_arm_config.joint_offsets_rad='[0.185504249,-1.676119148,-1.985360469,0.471459368,0.061374215,0.089759790]' \
   --teleop.right_arm_config.joint_offsets_rad='[-0.097389546,-1.672050437,-1.971852804,0.520146476,-0.038316864,-0.021480975]' \
-  --fps=30 \
-  --teleop_time_s=2
+  --fps=30
 ```
 
-第一次先运行两秒且不要移动 Leader，确认两个 Follower 没有起始跳变；之后改为五秒，
-一次只小幅移动一个关节，逐轴确认方向、零位和夹爪。方向错误才调整对应侧的
-`joint_signs`，比例误差才调整 `joint_scales`，零位误差调整
-`joint_offsets_rad`，不要改动作转换代码。确认后可把 `max_joint_delta` 提高到
-`0.02`，最终根据现场响应逐步提高，但不建议直接跳到大值。
+该命令没有 `--teleop_time_s`，因此会持续遥控且不会录制数据，直到按一次
+`Ctrl+C`。一次只小幅移动一个关节，逐轴确认方向、零位和夹爪。方向错误才调整对应侧
+的 `joint_signs`，比例误差才调整 `joint_scales`，零位误差调整
+`joint_offsets_rad`，不要改动作转换代码。当前保留低速安全值
+`max_joint_delta=0.01`；确认后可逐步提高到 `0.02`，不建议直接跳到大值。
 
 若出现 `Gripper home timed out`，先检查对应 Follower 夹爪是否被物体、线材或机械限位
 阻挡，再进行录制。退出时只按一次 `Ctrl+C` 并等待两条 A1Z 完成失能；连续按第二次会
-中断断电清理，并可能出现 `SocketcanBus was not properly shut down`。设置了
-`--teleop_time_s` 时优先等待程序自然退出。
-
-静止两秒和逐轴五秒验证均通过后，删除命令末尾的 `--teleop_time_s=2`，即可像单臂一样
-持续纯遥控；需要退出时只按一次 `Ctrl+C`，然后等待两个 Follower 完成失能。
+中断断电清理，并可能出现 `SocketcanBus was not properly shut down`。
 
 ### 可选：纯遥控时追加三路相机和 Rerun
 
-启用相机仍然是纯遥控，不会录制数据。先设置右腕 D405 序列号并构造三路 RGB 480p
-相机参数：
+启用相机仍然是纯遥控，不会录制数据。以下是当前三台相机的完整命令：
 
 ```bash
-RIGHT_D405_SERIAL=在这里填右腕D405序列号
-
-DUAL_CAMERAS="{top_rgb: {type: intelrealsense, serial_number_or_name: '025222071608', width: 640, height: 480, fps: 30, color_mode: rgb, use_depth: false}, left_wrist_rgb: {type: intelrealsense, serial_number_or_name: '260522273365', width: 640, height: 480, fps: 30, color_mode: rgb, use_depth: false}, right_wrist_rgb: {type: intelrealsense, serial_number_or_name: '$RIGHT_D405_SERIAL', width: 640, height: 480, fps: 30, color_mode: rgb, use_depth: false}}"
-```
-
-然后在上一条完整遥控命令末尾追加：
-
-```bash
-  --robot.cameras="$DUAL_CAMERAS" \
+a1z-teleoperate-dual \
+  --robot.type=a1z \
+  --robot.id=a1z_dual \
+  --robot.left_can=can0 \
+  --robot.right_can=can1 \
+  --robot.cameras="{top_rgb: {type: intelrealsense, serial_number_or_name: '025222071608', width: 640, height: 480, fps: 30, color_mode: rgb, use_depth: false}, left_wrist_rgb: {type: intelrealsense, serial_number_or_name: '260522273365', width: 640, height: 480, fps: 30, color_mode: rgb, use_depth: false}, right_wrist_rgb: {type: intelrealsense, serial_number_or_name: '260522278763', width: 640, height: 480, fps: 30, color_mode: rgb, use_depth: false}}" \
+  --robot.ema_alpha=0.3 \
+  --robot.max_joint_delta=0.01 \
+  --robot.gripper_start_hold=true \
+  --robot.return_home_on_disconnect=false \
+  --robot.open_grippers_on_disconnect=false \
+  --teleop.type=bi_a1z_leader \
+  --teleop.id=a1z_bi_leader \
+  --teleop.left_id=a1z_left_leader \
+  --teleop.right_id=a1z_right_leader \
+  --teleop.left_arm_config.port=/dev/ttyACM0 \
+  --teleop.right_arm_config.port=/dev/ttyACM1 \
+  --teleop.left_arm_config.joint_signs='[-1,1,1,1,1,-1]' \
+  --teleop.right_arm_config.joint_signs='[-1,1,1,1,1,-1]' \
+  --teleop.left_arm_config.joint_scales='[1,1,1,1,1,1]' \
+  --teleop.right_arm_config.joint_scales='[1,1,1,1,1,1]' \
+  --teleop.left_arm_config.joint_offsets_rad='[0.185504249,-1.676119148,-1.985360469,0.471459368,0.061374215,0.089759790]' \
+  --teleop.right_arm_config.joint_offsets_rad='[-0.097389546,-1.672050437,-1.971852804,0.520146476,-0.038316864,-0.021480975]' \
+  --fps=30 \
   --display_data=true \
   --display_compressed_images=false
 ```
 
-追加的 `--robot.cameras` 位于原 `--robot.cameras='{}'` 后面，以最后一个参数为准，并
-打开三路相机；`display_data=true` 只把状态、动作和画面发送给 Rerun，不会写入
-LeRobot 数据集。训练数据采集必须使用后文的 `a1z-record-dual`，不能把纯遥控误认为
-已经录制。
+该命令同样没有时限。`display_data=true` 只把状态、动作和三路画面发送给 Rerun，
+不会写入 LeRobot 数据集。训练数据采集必须使用后文的 `a1z-record-dual`，不能把纯
+遥控误认为已经录制。
 
 ## 4. 三路 RGB 与 Rerun 一集验证
 
@@ -181,7 +186,7 @@ LeRobot 数据集。训练数据采集必须使用后文的 `a1z-record-dual`，
 ```bash
 a1z-record-dual \
   --config_path=a1z_lerobot/configs/record_a1z_dual_realsense.yaml \
-  --robot.right_wrist_serial="$RIGHT_D405_SERIAL" \
+  --robot.right_wrist_serial=260522278763 \
   --dataset.repo_id=local/a1z_dual_smoke \
   --dataset.root=datasets/a1z_dual_smoke \
   --dataset.single_task='Dual-arm smoke test' \
@@ -209,7 +214,7 @@ a1z-record-dual \
 ```bash
 a1z-record-dual \
   --config_path=a1z_lerobot/configs/record_a1z_dual_realsense.yaml \
-  --robot.right_wrist_serial="$RIGHT_D405_SERIAL" \
+  --robot.right_wrist_serial=260522278763 \
   --dataset.repo_id=local/a1z_dual_task_01 \
   --dataset.root=datasets/a1z_dual_task_01 \
   --dataset.single_task='Describe exactly one task in English' \
@@ -245,7 +250,7 @@ RTX 4060 显存不足时添加 `--batch_size=4`，仍保持原始 480p 数据与
 ```bash
 a1z-rollout-act-dual \
   --config_path=a1z_lerobot/configs/a1z_dual_realsense.yaml \
-  --robot.right_wrist_serial="$RIGHT_D405_SERIAL" \
+  --robot.right_wrist_serial=260522278763 \
   --policy.path=outputs/act_a1z_dual_task_01/checkpoints/last/pretrained_model \
   --strategy.type=base \
   --inference.type=sync \
