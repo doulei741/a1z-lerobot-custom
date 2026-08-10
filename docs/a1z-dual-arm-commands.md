@@ -96,6 +96,39 @@ right: [-0.097389546, -1.672050437, -1.971852804, 0.520146476, -0.038316864, -0.
 这些数值只属于当前两条已标定 Leader 与当前两个 Follower 的配对，不应复制到另一套
 硬件。
 
+### Leader 二、三轴独立诊断
+
+诊断脚本只连接 Leader 串口，不连接 CAN、Follower、相机或录制器。运行左 Leader：
+
+```bash
+python -m a1z_lerobot.tools.diagnose_leader_joints \
+  --port=/dev/ttyACM0 \
+  --id=a1z_left_leader \
+  --duration-s=30 \
+  --threshold-rad=0.02 \
+  --joint-indices=1 2
+```
+
+运行右 Leader：
+
+```bash
+python -m a1z_lerobot.tools.diagnose_leader_joints \
+  --port=/dev/ttyACM1 \
+  --id=a1z_right_leader \
+  --duration-s=30 \
+  --threshold-rad=0.02 \
+  --joint-indices=1 2
+```
+
+每次先只移动物理二轴，再回到基准姿态，然后只移动物理三轴。输出中的 `J2/J3` 是当前
+映射角度，`delta_J2/delta_J3` 是相对启动基准的变化：
+
+- 物理二轴只改变 `delta_J2`，但方向与 A1Z 相反：调整二轴 `joint_signs` 并重新计算
+  该轴 offset。
+- 物理二轴只改变 `delta_J3`：检查 STS3215 ID 2/3 与物理关节的安装对应。
+- 物理二轴同时改变两项：Leader 结构或手动动作存在二、三轴耦合，需要先测量解耦关系。
+- Leader 输出正确而 Follower 仍响应错误：再检查实际发送给 A1Z SDK 的 14D target。
+
 ## 3. 纯遥控操作（不录制数据）
 
 `a1z-teleoperate-dual` 只执行 Leader 到 Follower 的实时遥控，不创建数据集，也不写入
