@@ -19,7 +19,7 @@
 仓库内含 `lerobot` 与 `GALAXEA-A1Z` 两个子模块，连同本项目各以可编辑模式安装：
 
 ```bash
-git clone --recursive https://github.com/userguide-galaxea/a1z-lerobot.git
+git clone --recursive git@github.com:doulei741/a1z-lerobot-custom.git
 pip install -e .
 pip install -e lerobot
 pip install -e GALAXEA-A1Z
@@ -224,3 +224,13 @@ python -m a1z_lerobot.scripts.rollout_act_single \
 
 rollout 会在控制前核对 checkpoint 的状态、动作和视觉特征。ACT 使用同步推理；RTC
 主要用于推理延迟更高的 VLA，不是此单臂 ACT 流程的默认选项。
+
+## 双臂 A1Z
+
+双臂功能位于独立的 `feature/dual-arm-workflow` 分支，不改变上述单臂类型、命令、
+配置或 7D 数据契约。双臂使用两个独立 Leader 串口、`can0`/`can1`、14D
+状态和动作，以及 D435 顶部 + 两台 D405 手腕的三路 RGB 480p 视觉。
+
+完整的逐级上电、双 Leader 校准、五秒遥控、Rerun 录制、ACT 训练和推理命令见
+[双臂操作手册](docs/a1z-dual-arm-commands.md)。项目全部常用命令的中文索引见
+[指令.md](指令.md)。
