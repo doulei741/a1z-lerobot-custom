@@ -176,6 +176,34 @@ a1z-teleoperate-dual \
 阻挡，再进行录制。退出时只按一次 `Ctrl+C` 并等待两条 A1Z 完成失能；连续按第二次会
 中断断电清理，并可能出现 `SocketcanBus was not properly shut down`。
 
+当一切都调整好了就可以用下述代码了：
+```bash
+a1z-teleoperate-dual \
+  --robot.type=a1z \
+  --robot.id=a1z_dual \
+  --robot.left_can=can0 \
+  --robot.right_can=can1 \
+  --robot.cameras='{}' \
+  --robot.ema_alpha=1 \
+  --robot.max_joint_delta=0.05 \
+  --robot.gripper_start_hold=true \
+  --robot.return_home_on_disconnect=false \
+  --robot.open_grippers_on_disconnect=false \
+  --teleop.type=bi_a1z_leader \
+  --teleop.id=a1z_bi_leader \
+  --teleop.left_id=a1z_left_leader \
+  --teleop.right_id=a1z_right_leader \
+  --teleop.left_arm_config.port=/dev/ttyACM0 \
+  --teleop.right_arm_config.port=/dev/ttyACM1 \
+  --teleop.left_arm_config.joint_signs='[-1,-1,1,1,1,-1]' \
+  --teleop.right_arm_config.joint_signs='[-1,-1,1,1,1,-1]' \
+  --teleop.left_arm_config.joint_scales='[1,1,1,1,1,1]' \
+  --teleop.right_arm_config.joint_scales='[1,1,1,1,1,1]' \
+  --teleop.left_arm_config.joint_offsets_rad='[0.185504249,1.676119148,-1.985360469,0.471459368,0.061374215,0.089759790]' \
+  --teleop.right_arm_config.joint_offsets_rad='[-0.097389546,1.672050437,-1.971852804,0.520146476,-0.038316864,-0.021480975]' \
+  --fps=30
+```
+
 ### 可选：纯遥控时追加三路相机和 Rerun
 
 启用相机仍然是纯遥控，不会录制数据。以下是当前三台相机的完整命令：
@@ -187,8 +215,8 @@ a1z-teleoperate-dual \
   --robot.left_can=can0 \
   --robot.right_can=can1 \
   --robot.cameras="{top_rgb: {type: intelrealsense, serial_number_or_name: '025222071608', width: 640, height: 480, fps: 30, color_mode: rgb, use_depth: false}, left_wrist_rgb: {type: intelrealsense, serial_number_or_name: '260522273365', width: 640, height: 480, fps: 30, color_mode: rgb, use_depth: false}, right_wrist_rgb: {type: intelrealsense, serial_number_or_name: '260522278763', width: 640, height: 480, fps: 30, color_mode: rgb, use_depth: false}}" \
-  --robot.ema_alpha=0.3 \
-  --robot.max_joint_delta=0.01 \
+  --robot.ema_alpha=1 \
+  --robot.max_joint_delta=0.05 \
   --robot.gripper_start_hold=true \
   --robot.return_home_on_disconnect=false \
   --robot.open_grippers_on_disconnect=false \
@@ -249,18 +277,47 @@ a1z-record-dual \
 a1z-record-dual \
   --config_path=a1z_lerobot/configs/record_a1z_dual_realsense.yaml \
   --robot.right_wrist_serial=260522278763 \
-  --dataset.repo_id=local/a1z_dual_task_01 \
-  --dataset.root=datasets/a1z_dual_task_01 \
-  --dataset.single_task='Describe exactly one task in English' \
-  --dataset.num_episodes=50 \
+  --dataset.repo_id=local/a1z_dual_task_8.11 \
+  --dataset.root=datasets/a1z_dual_task_8.11 \
+  --dataset.single_task='Pick up the pen with your left hand, pick up the pen holder with your right hand. Put the pen from your left hand into the pen holder held in your right hand, then place the pen holder at the designated position.' \
+  --dataset.num_episodes=40 \
   --dataset.episode_time_s=60 \
-  --dataset.reset_time_s=30 \
-  --display_data=true
+  --dataset.reset_time_s=10 \
+  --display_data=true \
+  --display_compressed_images=false
 ```
 
 固定数据契约为 14D `observation.state`、14D `action` 和三路 RGB。训练和推理的
 相机键、分辨率以及状态/动作维度必须完全一致。录制标签是经过 EMA、逐帧关节限幅和
 夹爪起始保持后实际发给 Follower 的动作。
+
+### 中断后继续录制（resume）
+
+`Ctrl+C` 或 `Esc` 停止后，已经保存并 finalize 的 episode 可以继续追加。resume 时
+`--dataset.num_episodes` 表示“本次新增多少集”，不是最终总集数。例如当前数据集已经
+保存 25 集，目标总数为 40 集时，本次必须填写 `15`；如果填写 `40`，最终会得到 65 集。
+
+当前 `local/a1z_dual_task_8.11` 从 25 集继续录到 40 集的完整命令：
+
+```bash
+a1z-record-dual \
+  --config_path=a1z_lerobot/configs/record_a1z_dual_realsense.yaml \
+  --resume=true \
+  --robot.right_wrist_serial=260522278763 \
+  --dataset.repo_id=local/a1z_dual_task_8.11 \
+  --dataset.root=datasets/a1z_dual_task_8.11 \
+  --dataset.single_task='Pick up the pen with your left hand, pick up the pen holder with your right hand. Put the pen from your left hand into the pen holder held in your right hand, then place the pen holder at the designated position.' \
+  --dataset.num_episodes=15 \
+  --dataset.episode_time_s=60 \
+  --dataset.reset_time_s=10 \
+  --display_data=true \
+  --display_compressed_images=false
+```
+
+该命令会从 episode 索引 25（第 26 集）开始追加，到索引 39 为止。`repo_id`、`root`、
+任务文本、FPS、三路相机键/尺寸以及 14D state/action 必须与已有数据集保持一致；程序会
+在连接硬件后、正式追加前执行兼容性检查。停止整个录制任务优先使用 `Esc`，它会保留已
+保存 episode 并 finalize 当前数据集；正在录制但尚未保存的 episode 不计入总数。
 
 ## 6. RTX 4060 训练 ACT
 
