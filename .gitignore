@@ -9,5 +9,11 @@ __pycache__/
 tmp
 tests
 docs
+!a1z_web/backend/tests/
+!a1z_web/backend/tests/**
+!a1z_web/docs/
+!a1z_web/docs/**
+!a1z_web/deploy/
+!a1z_web/deploy/**
 .worktrees/
 legacy/

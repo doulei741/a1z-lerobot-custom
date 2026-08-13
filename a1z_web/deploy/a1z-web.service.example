@@ -1,0 +1,14 @@
+[Unit]
+Description=A1Z LeRobot Web hardware control service
+After=network.target
+
+[Service]
+Type=simple
+User=anno
+WorkingDirectory=/path/to/a1z-lerobot
+EnvironmentFile=/path/to/a1z-lerobot/a1z_web/.env
+ExecStart=/path/to/a1z-lerobot/a1z_web/backend/.venv/bin/uvicorn app.main:app --app-dir a1z_web/backend --host 127.0.0.1 --port 8000 --workers 1
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
