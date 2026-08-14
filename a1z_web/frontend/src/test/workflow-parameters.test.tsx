@@ -33,6 +33,7 @@ test('teleoperation sends graphical CAN, leader, camera and safety parameters', 
   await user.clear(await screen.findByLabelText('Left Leader ID'))
   await user.type(screen.getByLabelText('Left Leader ID'), 'left_custom')
   await user.selectOptions(screen.getByLabelText('Camera'), 'configured')
+  expect(screen.getByRole('checkbox', { name: 'Open Rerun viewer' })).toBeChecked()
   await user.clear(screen.getByLabelText('Camera Width'))
   await user.type(screen.getByLabelText('Camera Width'), '848')
   await user.click(screen.getByRole('checkbox', { name: /确认运动安全检查/ }))
@@ -41,6 +42,7 @@ test('teleoperation sends graphical CAN, leader, camera and safety parameters', 
   const payload = captured.at(0)!
   expect(payload.left_leader_id).toBe('left_custom')
   expect(payload.left_can).toBe('can0')
+  expect(payload.display_data).toBe(true)
   expect((payload.cameras as Record<string, { width: number }>).top_rgb!.width).toBe(848)
 })
 
@@ -51,7 +53,7 @@ test('teleoperation exposes absolute gripper, compressed display and optional du
   render(<App initialPath="/teleoperation" disableRealtime />)
 
   expect(await screen.findByRole('checkbox', { name: 'Gripper start hold' })).not.toBeChecked()
-  await user.click(screen.getByRole('checkbox', { name: 'Rerun display_data' }))
+  await user.click(screen.getByRole('checkbox', { name: 'Open Rerun viewer' }))
   await user.click(screen.getByRole('checkbox', { name: 'Display compressed images' }))
   await user.type(screen.getByLabelText('Teleoperation duration'), '12')
   await user.click(screen.getByRole('checkbox', { name: /确认运动安全检查/ }))

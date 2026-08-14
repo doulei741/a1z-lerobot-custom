@@ -129,7 +129,7 @@ Web 启动后，点击顶部“设备准备中心”：
 
 ### Teleoperation
 
-支持 Single/Dual、CAN、Leader port/id、6 轴 sign/scale/offset、FPS、EMA、`max_joint_delta`、夹爪启动保持、退出 Home/张开、Rerun `display_data`/压缩显示，以及无相机/启用 RGB 相机、序列号、宽高与相机 FPS。高级设置可填写 `teleop_time_s`；留空表示无限时遥控，只通过 Safe Stop 结束。`gripper_start_hold` 的 Web 默认值为 `false`，即直接使用校准与 Pairing 后的绝对夹爪目标；如果现场需要避免初始夹爪跳变，可以显式开启。默认映射来自当前现场验证配置；Single 与 Dual 映射不同。真实 worker 代理 `a1z-teleoperate-single/dual`，ready 依赖 A1Z CLI 的真实连接日志，不以“进程存在”冒充 ready。
+支持 Single/Dual、CAN、Leader port/id、6 轴 sign/scale/offset、FPS、EMA、`max_joint_delta`、夹爪启动保持、退出 Home/张开、Rerun `display_data`/压缩显示，以及无相机/启用 RGB 相机、序列号、宽高与相机 FPS。选择“Configured RGB cameras”时页面会自动启用 `display_data`，启动任务后由 LeRobot 调用 `rr.spawn()` 打开独立 Rerun Viewer；画面不会嵌入浏览器，避免 Web 后端重复占用 RealSense。用户仍可通过相机配置下方的开关显式关闭 Rerun。高级设置可填写 `teleop_time_s`；留空表示无限时遥控，只通过 Safe Stop 结束。`gripper_start_hold` 的 Web 默认值为 `false`，即直接使用校准与 Pairing 后的绝对夹爪目标；如果现场需要避免初始夹爪跳变，可以显式开启。默认映射来自当前现场验证配置；Single 与 Dual 映射不同。真实 worker 代理 `a1z-teleoperate-single/dual`，ready 依赖 A1Z CLI 的真实连接日志，不以“进程存在”冒充 ready。
 
 ### Recording
 
