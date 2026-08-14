@@ -1,4 +1,4 @@
-import type { ApiFailure, CanInitializeResult, DeviceInventory, LogEntry, PolicyReport, PreflightReport, TaskInfo } from '../types'
+import type { ApiFailure, CanInitializeResult, DeviceInventory, LogEntry, PolicyReport, PreflightReport, RuntimeModeResult, SystemHealth, TaskInfo } from '../types'
 
 const configuredBase = import.meta.env.VITE_API_BASE_URL as string | undefined
 export const API_BASE = configuredBase?.replace(/\/$/, '') ?? ''
@@ -32,7 +32,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => request<{ mode: 'mock' | 'real'; hardware_motion_enabled: boolean; status: string; resources: Record<string, string> }>('/system/health'),
+  health: () => request<SystemHealth>('/system/health'),
+  setRuntimeMode: (mode: 'mock' | 'real', hardwareConfirmation: boolean) => request<RuntimeModeResult>('/system/mode', { method: 'POST', body: JSON.stringify({ mode, hardware_confirmation: hardwareConfirmation }) }),
   devices: () => request<DeviceInventory>('/devices'),
   initializeCan: (interfaceName: 'can0' | 'can1') => request<CanInitializeResult>('/devices/can/initialize', { method: 'POST', body: JSON.stringify({ interface: interfaceName }) }),
   tasks: () => request<TaskInfo[]>('/tasks'),

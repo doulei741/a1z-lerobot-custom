@@ -25,6 +25,11 @@ class CanInitializeRequest(BaseModel):
     interface: Literal["can0", "can1"]
 
 
+class RuntimeModeRequest(BaseModel):
+    mode: Literal["mock", "real"]
+    hardware_confirmation: bool = False
+
+
 class JointMapping(BaseModel):
     signs: FiniteSix = Field(default_factory=lambda: [-1, -1, 1, 1, 1, -1])
     scales: FiniteSix = Field(default_factory=lambda: [1, 1, 1, 1, 1, 1])

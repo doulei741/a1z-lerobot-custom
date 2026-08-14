@@ -19,6 +19,7 @@ from app.schemas.workflows import (
     PolicyInspectRequest,
     RecordAction,
     RecordingRequest,
+    RuntimeModeRequest,
     StopRequest,
     TeleoperationRequest,
 )
@@ -90,6 +91,34 @@ async def system_health(request: Request) -> dict[str, Any]:
         "status": "fault" if "fault" in states else "degraded" if "offline" in states else "healthy",
         "resources": resources,
         "owners": owners,
+    }
+
+
+@router.post("/system/mode")
+async def set_runtime_mode(payload: RuntimeModeRequest, request: Request) -> dict[str, Any]:
+    svc = services(request)
+    owners = await svc.hardware.snapshot()
+    if owners:
+        raise ApiError(
+            "hardware_resource_busy",
+            "有任务正在占用硬件，不能切换运行模式",
+            status_code=409,
+            details={"owners": owners, "action": "先使用软件停止结束当前任务，再切换运行模式。"},
+        )
+    if payload.mode == "real" and not payload.hardware_confirmation:
+        raise ApiError(
+            "hardware_confirmation_required",
+            "启用真机实操前必须确认现场安全条件",
+            status_code=409,
+            details={"action": "确认工作区清空、设备连接正确且物理急停可用。"},
+        )
+    svc.settings.mock = payload.mode == "mock"
+    svc.settings.allow_hardware = payload.mode == "real"
+    return {
+        "mode": payload.mode,
+        "hardware_motion_enabled": svc.settings.allow_hardware,
+        "runtime_only": True,
+        "message": "已切换到真机实操模式" if payload.mode == "real" else "已切换到 Mock 仿真模式",
     }
 
 

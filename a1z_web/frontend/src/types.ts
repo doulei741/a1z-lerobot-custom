@@ -56,6 +56,20 @@ export interface CanInitializeResult {
   message: string
 }
 
+export interface SystemHealth {
+  mode: 'mock' | 'real'
+  hardware_motion_enabled: boolean
+  status: string
+  resources: Record<string, string>
+}
+
+export interface RuntimeModeResult {
+  mode: 'mock' | 'real'
+  hardware_motion_enabled: boolean
+  runtime_only: boolean
+  message: string
+}
+
 export interface PreflightIssue {
   code: string
   resource: string

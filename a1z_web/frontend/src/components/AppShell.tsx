@@ -8,6 +8,7 @@ import { usePlatformStore } from '../stores/platform'
 import { LogDrawer } from './LogDrawer'
 import { DeviceCenter } from './DeviceCenter'
 import { PreflightDialog } from './PreflightDialog'
+import { RuntimeModeControl } from './RuntimeModeControl'
 import { Button, StatusDot } from './ui'
 import type { PreflightReport } from '../types'
 
@@ -57,7 +58,7 @@ export function AppShell({ children }: PropsWithChildren) {
       <header className="topbar">
         <div className="system-state"><StatusDot state={health.data?.status ?? 'unknown'} label="系统" /><StatusDot state={ws === 'connected' ? 'healthy' : ws === 'connecting' ? 'degraded' : 'unknown'} label="实时通道" />{health.data?.mode === 'mock' && <span className="mock-badge">MOCK</span>}</div>
         <div className="active-task">{task.data ? <><span>{task.data.task_type}</span><strong>{task.data.status.toUpperCase()}</strong><code>{task.data.task_id}</code></> : <span>无活动任务</span>}</div>
-        <div className="topbar-actions"><Button variant="secondary" onClick={() => setDeviceCenterOpen(true)}><Usb size={16} />设备中心</Button><Button variant="danger" disabled={!activeTaskId || stop.isPending} onClick={() => stop.mutate()}><OctagonX size={17} />软件停止</Button></div>
+        <div className="topbar-actions">{health.data && <RuntimeModeControl mode={health.data.mode} activeTask={Boolean(activeTaskId)} />}<Button variant="secondary" onClick={() => setDeviceCenterOpen(true)}><Usb size={16} />设备中心</Button><Button variant="danger" disabled={!activeTaskId || stop.isPending} onClick={() => stop.mutate()}><OctagonX size={17} />软件停止</Button></div>
       </header>
       {health.data?.mode === 'mock' && <div className="mode-banner"><AlertTriangle size={16} /><strong>Mock 仿真模式</strong><span>页面不会连接或移动真实机械臂；启动动作前会再次提示。</span></div>}
       {health.data?.mode === 'real' && !health.data.hardware_motion_enabled && <div className="mode-banner"><AlertTriangle size={16} /><strong>实机动作已禁用</strong><span>设置 A1Z_WEB_ALLOW_HARDWARE=1 并重启后端后才能启动机器人任务。</span></div>}

@@ -105,6 +105,12 @@ Web 启动后，点击顶部“设备准备中心”：
 
 浏览器不能提交 shell 文本，CAN 名只允许 `can0/can1`，Web 不接收或保存 sudo 密码。已有机器人任务占用硬件时，后端会拒绝重配 CAN。命令行 `setup.sh` 仅作为故障维护后备，不再是正常产品流程。Web 不替代物理安全检查，也不会自动运行硬件 smoke test。
 
+### 在 Web 中切换 Mock / 真机
+
+顶部状态栏提供当前模式按钮：`Mock 仿真` 或 `真机实操`。点击 `Mock 仿真` 后，完成工作区与物理急停确认，即可把当前后端会话切换为真机模式；不需要退出 Web，也不受启动终端中旧的 `A1Z_WEB_MOCK` 环境变量限制。切换模式本身不会连接或移动机械臂，后续仍需在具体页面通过设备 Preflight 和运动安全确认。
+
+切换回 Mock 不需要运动确认。存在活动任务或硬件资源被占用时，前端禁用切换，后端也会返回 409。运行时切换仅对当前后端进程有效；后端重启后仍以 `.env`/启动环境为初始模式，这是为了避免一次真机授权在未来重启时被静默继承。
+
 `A1Z_WEB_MOCK=1` 与 `A1Z_WEB_ALLOW_HARDWARE=0` 是开发界面的安全组合，只会模拟任务成功；即使 USB 设备已经插入，也绝不会驱动实机。Real 模式下，每个正式页面在启动动作前都会调用后端权威 Preflight：
 
 - Calibration：检查所选 Leader 串口；
@@ -148,6 +154,7 @@ worker 复用 `RecordConfig`、`make_robot_from_config()`、`make_teleoperator_f
 主要 API：
 
 - `GET /api/system/health`, `/api/devices`, `/api/tasks`, `/api/schema/{workflow}`
+- `POST /api/system/mode`（Mock/真机运行时切换，真机要求显式安全确认）
 - `POST /api/devices/can/initialize`（只允许 can0/can1，固定 1 Mbps，Polkit 授权）
 - `GET /api/tasks/{id}`, `/api/tasks/{id}/logs?after=N`; `POST /api/tasks/{id}/stop`
 - `POST /api/calibration/start`, `/api/calibration/{id}/{middle|record-range|stop-range|save|cancel}`
