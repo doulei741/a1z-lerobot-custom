@@ -40,7 +40,10 @@ def build_command(cfg: dict) -> list[str]:
         f"--robot.return_home_on_disconnect={boolean(cfg['return_home_on_disconnect'])}",
         f"--fps={cfg['fps']}",
         f"--display_data={boolean(cfg['display_data'])}",
+        f"--display_compressed_images={boolean(cfg['display_compressed_images'])}",
     ]
+    if cfg.get("teleop_time_s") is not None:
+        command.append(f"--teleop_time_s={cfg['teleop_time_s']}")
     if mode == "dual":
         command.append(f"--robot.open_grippers_on_disconnect={boolean(cfg['open_grippers_on_disconnect'])}")
     return command

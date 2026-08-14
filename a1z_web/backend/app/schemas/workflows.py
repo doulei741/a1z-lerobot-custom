@@ -122,8 +122,10 @@ class TeleoperationRequest(MotionBase):
     right_leader_id: str = "a1z_right_leader"
     left_mapping: JointMapping = Field(default_factory=left_dual_verified_mapping)
     right_mapping: JointMapping = Field(default_factory=right_dual_verified_mapping)
-    gripper_start_hold: bool = True
+    gripper_start_hold: bool = False
     display_data: bool = False
+    display_compressed_images: bool = False
+    teleop_time_s: float | None = Field(default=None, gt=0, le=86400)
     cameras: dict[str, CameraSelection] = Field(default_factory=dict)
 
     @model_validator(mode="before")
@@ -142,6 +144,25 @@ class TeleoperationRequest(MotionBase):
         return value
 
 
+class CameraEncoderRequest(BaseModel):
+    vcodec: Literal["libsvtav1", "h264", "hevc", "auto", "h264_nvenc", "hevc_nvenc"] = "libsvtav1"
+    pix_fmt: Literal["yuv420p"] = "yuv420p"
+    g: int | None = Field(default=2, ge=1, le=600)
+    crf: float | None = Field(default=30, ge=0, le=100)
+    preset: int | str | None = 12
+    fast_decode: int = Field(default=0, ge=0, le=2)
+    video_backend: Literal["pyav"] = "pyav"
+
+    @field_validator("preset")
+    @classmethod
+    def safe_preset(cls, value: int | str | None) -> int | str | None:
+        if isinstance(value, int) and not 0 <= value <= 63:
+            raise ValueError("integer preset must be between 0 and 63")
+        if isinstance(value, str) and not re.fullmatch(r"[A-Za-z0-9_-]{1,32}", value):
+            raise ValueError("invalid encoder preset")
+        return value
+
+
 class DatasetRequest(BaseModel):
     repo_id: str = "local/a1z_dual_web"
     root: str = "datasets/a1z_dual_web"
@@ -151,6 +172,13 @@ class DatasetRequest(BaseModel):
     reset_time_s: float = Field(default=10, ge=0, le=3600)
     fps: int = Field(default=30, ge=1, le=60)
     video: bool = True
+    num_image_writer_processes: int = Field(default=0, ge=0, le=32)
+    num_image_writer_threads_per_camera: int = Field(default=4, ge=1, le=64)
+    video_encoding_batch_size: int = Field(default=1, ge=1, le=1000)
+    camera_encoder: CameraEncoderRequest = Field(default_factory=CameraEncoderRequest)
+    streaming_encoding: bool = False
+    encoder_queue_maxsize: int = Field(default=30, ge=1, le=10000)
+    encoder_threads: int | None = Field(default=None, ge=1, le=128)
 
     @field_validator("repo_id", "root")
     @classmethod
@@ -172,6 +200,7 @@ class RecordingRequest(TeleoperationRequest):
     resume: bool = False
     display_data: bool = True
     display_compressed_images: bool = False
+    play_sounds: bool = False
     right_wrist_serial: str | None = "260522278763"
 
     @model_validator(mode="before")

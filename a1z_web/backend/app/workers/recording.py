@@ -83,11 +83,10 @@ def merge_request(base: dict[str, Any], request: dict[str, Any]) -> dict[str, An
         })
     data["dataset"].update(request["dataset"])
     data.update({
-        "fps": request["fps"],
         "resume": request["resume"],
         "display_data": request["display_data"],
         "display_compressed_images": request["display_compressed_images"],
-        "play_sounds": False,
+        "play_sounds": request["play_sounds"],
     })
     return data
 

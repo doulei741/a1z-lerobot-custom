@@ -129,13 +129,15 @@ Web 启动后，点击顶部“设备准备中心”：
 
 ### Teleoperation
 
-支持 Single/Dual、CAN、Leader port/id、6 轴 sign/scale/offset、FPS、EMA、`max_joint_delta`、夹爪启动保持、退出 Home/张开、Rerun `display_data`，以及无相机/启用 RGB 相机、序列号、宽高与相机 FPS。默认映射来自当前现场验证配置；Single 与 Dual 映射不同。真实 worker 代理 `a1z-teleoperate-single/dual`，ready 依赖 A1Z CLI 的真实连接日志，不以“进程存在”冒充 ready。
+支持 Single/Dual、CAN、Leader port/id、6 轴 sign/scale/offset、FPS、EMA、`max_joint_delta`、夹爪启动保持、退出 Home/张开、Rerun `display_data`/压缩显示，以及无相机/启用 RGB 相机、序列号、宽高与相机 FPS。高级设置可填写 `teleop_time_s`；留空表示无限时遥控，只通过 Safe Stop 结束。`gripper_start_hold` 的 Web 默认值为 `false`，即直接使用校准与 Pairing 后的绝对夹爪目标；如果现场需要避免初始夹爪跳变，可以显式开启。默认映射来自当前现场验证配置；Single 与 Dual 映射不同。真实 worker 代理 `a1z-teleoperate-single/dual`，ready 依赖 A1Z CLI 的真实连接日志，不以“进程存在”冒充 ready。
 
 ### Recording
 
 worker 复用 `RecordConfig`、`make_robot_from_config()`、`make_teleoperator_from_config()`、`record_loop()`、`LeRobotDataset.create/resume()`、`sanity_check_dataset_robot_compatibility()` 和 `VideoEncodingManager`。不再模拟方向键，而使用 stdin JSON 领域协议。
 
-页面可调整录制 YAML、Dataset repo/root/task、Resume 与新增 Episode、Episode/Reset 时间、外层与 Dataset FPS、视频开关、三相机序列号/480p 尺寸、CAN、Leader port/id、Pairing profile、EMA、`max_joint_delta`、夹爪启动保持、退出行为、Rerun 和压缩图显示。所有值通过 Pydantic 验证并传入现有 `RecordConfig`，相机始终为 RGB、`use_depth=false`。
+页面可调整录制 YAML、Dataset repo/root/task、Resume 与 Episode 数量、Episode/Reset 时间、外层与 Dataset FPS、视频开关、三相机序列号/480p 尺寸、CAN、Leader port/id、Pairing profile、EMA、`max_joint_delta`、夹爪启动保持、退出行为、Rerun 和压缩图显示。高级设置还提供真实 `DatasetRecordConfig` 参数：写图进程数、每相机写图线程数、视频批大小、流式编码、编码队列、编码线程、codec、CRF、preset、GOP、fast decode 与声音提示。默认保持当前稳定值；只有实测录制 FPS 或保存耗时存在问题时才调整。所有值通过 Pydantic 验证并传入现有 `RecordConfig`，相机始终为 RGB、`use_depth=false`，不接受自由 CLI 参数。
+
+录制页面的 `gripper_start_hold` 默认同样为 `false`。这会让录制标签对应校准/Pairing 后的绝对 Leader 夹爪目标；启动前必须确认 Leader 与 Follower 夹爪姿态一致。若某次任务确实需要“从当前 Follower 开度开始做相对保持”，可在高级设置显式开启。
 
 三层状态独立：
 
@@ -143,7 +145,9 @@ worker 复用 `RecordConfig`、`make_robot_from_config()`、`make_teleoperator_f
 - Record protocol：`ready/recording/saving/resetting/finished/fault`
 - Frontend：由服务端阶段派生 `waiting_ready/recording/saving/resetting/waiting_next/completed/fault`
 
-正常流程：`ready → start_episode → recording → finish/quick_next → saving → saving_complete → resetting → reset_done → ready`。Quick Next 只是在合法阶段 arm 自动继续，绝不跳过保存和 Reset。每个命令含 `client_action_id` 并幂等；非法阶段返回 409。首帧未写入时 Finish/Quick Next 被拒绝，防止空 Episode。Resume 页面显示 Existing、Add 和 Total，启动前验证 state/action 维度、feature/camera keys、480p 与 FPS。
+正常流程：`ready → start_episode → recording → finish/quick_next → saving → saving_complete → resetting → reset_done → ready`。Quick Next 只是在合法阶段 arm 自动继续，绝不跳过保存和 Reset。每个命令含 `client_action_id` 并幂等；非法阶段返回 409。首帧未写入时 Finish/Quick Next 被拒绝，防止空 Episode。
+
+Resume 完全图形化：打开 Resume 后先执行 Compatibility，页面读取 Existing Episodes；操作者填写 Target Total，页面自动计算 Add Episodes，并把这个差值作为 LeRobot `dataset.num_episodes`。例如已有 25 集、目标 45 集，实际传给录制器的是新增 20 集。Target 必须大于 Existing，启动前仍验证 state/action 维度、feature/camera keys、480p 与 FPS。
 
 ### Inference
 
