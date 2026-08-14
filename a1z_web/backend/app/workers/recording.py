@@ -15,7 +15,7 @@ import a1z_lerobot.teleoperators.a1z_leader  # noqa: F401
 import a1z_lerobot.teleoperators.bi_a1z_leader  # noqa: F401
 import draccus
 import yaml
-from common import emit, request_json
+from common import emit, request_json, start_task_rerun
 from lerobot.common.control_utils import sanity_check_dataset_robot_compatibility
 from lerobot.datasets import (
     LeRobotDataset,
@@ -28,23 +28,28 @@ from lerobot.robots import make_robot_from_config
 from lerobot.scripts.lerobot_record import RecordConfig, record_loop
 from lerobot.teleoperators import make_teleoperator_from_config
 from lerobot.utils.feature_utils import combine_feature_dicts
+from lerobot.utils.visualization_utils import init_rerun, shutdown_rerun
 
 
 def merge_request(base: dict[str, Any], request: dict[str, Any]) -> dict[str, Any]:
     data = deepcopy(base)
     robot = data["robot"]
-    robot.update({
-        "ema_alpha": request["ema_alpha"],
-        "max_joint_delta": request["max_joint_delta"],
-        "gripper_start_hold": request["gripper_start_hold"],
-        "return_home_on_disconnect": request["return_home_on_disconnect"],
-    })
+    robot.update(
+        {
+            "ema_alpha": request["ema_alpha"],
+            "max_joint_delta": request["max_joint_delta"],
+            "gripper_start_hold": request["gripper_start_hold"],
+            "return_home_on_disconnect": request["return_home_on_disconnect"],
+        }
+    )
     if request["mode"] == "dual":
-        robot.update({
-            "left_can": request["left_can"],
-            "right_can": request["right_can"],
-            "open_grippers_on_disconnect": request["open_grippers_on_disconnect"],
-        })
+        robot.update(
+            {
+                "left_can": request["left_can"],
+                "right_can": request["right_can"],
+                "open_grippers_on_disconnect": request["open_grippers_on_disconnect"],
+            }
+        )
     else:
         robot["can_channel"] = request["left_can"]
     if request["mode"] == "dual" and request.get("right_wrist_serial"):
@@ -66,60 +71,92 @@ def merge_request(base: dict[str, Any], request: dict[str, Any]) -> dict[str, An
         }
     teleop = data["teleop"]
     if request["mode"] == "dual":
-        teleop.update({"left_id": request["left_leader_id"], "right_id": request["right_leader_id"]})
+        teleop.update(
+            {"left_id": request["left_leader_id"], "right_id": request["right_leader_id"]}
+        )
         for side in ("left", "right"):
             arm = teleop[f"{side}_arm_config"]
             arm["port"] = request[f"{side}_leader_port"]
+            arm["auto_use_calibration"] = True
             mapping = request[f"{side}_mapping"]
-            arm.update({"joint_signs": mapping["signs"], "joint_scales": mapping["scales"], "joint_offsets_rad": mapping["offsets_rad"]})
+            arm.update(
+                {
+                    "joint_signs": mapping["signs"],
+                    "joint_scales": mapping["scales"],
+                    "joint_offsets_rad": mapping["offsets_rad"],
+                }
+            )
     else:
         mapping = request["left_mapping"]
-        teleop.update({
-            "id": request["left_leader_id"],
-            "port": request["left_leader_port"],
-            "joint_signs": mapping["signs"],
-            "joint_scales": mapping["scales"],
-            "joint_offsets_rad": mapping["offsets_rad"],
-        })
+        teleop.update(
+            {
+                "id": request["left_leader_id"],
+                "port": request["left_leader_port"],
+                "auto_use_calibration": True,
+                "joint_signs": mapping["signs"],
+                "joint_scales": mapping["scales"],
+                "joint_offsets_rad": mapping["offsets_rad"],
+            }
+        )
     data["dataset"].update(request["dataset"])
-    data.update({
-        "resume": request["resume"],
-        "display_data": request["display_data"],
-        "display_compressed_images": request["display_compressed_images"],
-        "play_sounds": request["play_sounds"],
-    })
+    data.update(
+        {
+            "resume": request["resume"],
+            "display_data": request["display_data"],
+            "display_compressed_images": request["display_compressed_images"],
+            "play_sounds": request["play_sounds"],
+        }
+    )
     return data
 
 
 def buffer_frames(dataset: LeRobotDataset) -> int:
-    buffer = dataset.episode_buffer
-    if not buffer:
+    writer = dataset.writer
+    if writer is None or writer.episode_buffer is None:
         return 0
-    for value in buffer.values():
-        try:
-            return len(value)
-        except TypeError:
-            continue
-    return 0
+    return int(writer.episode_buffer.get("size", 0))
+
+
+def save_episode_without_fork(dataset: Any) -> None:
+    """Encode videos in-process; forking after hardware threads start can deadlock."""
+
+    dataset.save_episode(parallel_encoding=False)
+
+
+def session_is_complete(
+    *, initial_episodes: int, current_episodes: int, requested_additions: int
+) -> bool:
+    return current_episodes - initial_episodes >= requested_additions
 
 
 def main() -> int:
     request = request_json()
     root = Path.cwd()
     config_path = root / request["config_path"]
-    config = draccus.decode(RecordConfig, merge_request(yaml.safe_load(config_path.read_text()), request))
+    config = draccus.decode(
+        RecordConfig, merge_request(yaml.safe_load(config_path.read_text()), request)
+    )
     robot = make_robot_from_config(config.robot)
     teleop = make_teleoperator_from_config(config.teleop)
     teleop_processor, action_processor, observation_processor = make_default_processors()
     features = combine_feature_dicts(
-        aggregate_pipeline_dataset_features(teleop_processor, create_initial_features(action=robot.action_features), use_videos=config.dataset.video),
-        aggregate_pipeline_dataset_features(observation_processor, create_initial_features(observation=robot.observation_features), use_videos=config.dataset.video),
+        aggregate_pipeline_dataset_features(
+            teleop_processor,
+            create_initial_features(action=robot.action_features),
+            use_videos=config.dataset.video,
+        ),
+        aggregate_pipeline_dataset_features(
+            observation_processor,
+            create_initial_features(observation=robot.observation_features),
+            use_videos=config.dataset.video,
+        ),
     )
     dataset: LeRobotDataset | None = None
     commands: queue.Queue[dict[str, Any]] = queue.Queue()
     events = {"exit_early": False, "rerecord_episode": False, "stop_recording": False}
     stop_reader = threading.Event()
     fault_announced = threading.Event()
+    rerun_started = False
 
     class ControlFaultHandler(logging.Handler):
         def emit(self, record: logging.LogRecord) -> None:
@@ -146,6 +183,10 @@ def main() -> int:
 
     threading.Thread(target=reader, name="record-web-command-reader", daemon=True).start()
     try:
+        if config.display_data:
+            if not start_task_rerun("recording"):
+                init_rerun(session_name="recording")
+            rerun_started = True
         if config.resume:
             dataset = LeRobotDataset.resume(config.dataset.repo_id, root=config.dataset.root)
             sanity_check_dataset_robot_compatibility(dataset, robot, config.dataset.fps, features)
@@ -159,13 +200,15 @@ def main() -> int:
                 features=features,
                 use_videos=config.dataset.video,
                 image_writer_processes=config.dataset.num_image_writer_processes,
-                image_writer_threads=config.dataset.num_image_writer_threads_per_camera * len(robot.cameras),
+                image_writer_threads=config.dataset.num_image_writer_threads_per_camera
+                * len(robot.cameras),
                 batch_encoding_size=config.dataset.video_encoding_batch_size,
                 camera_encoder=config.dataset.camera_encoder,
                 encoder_threads=config.dataset.encoder_threads,
                 streaming_encoding=config.dataset.streaming_encoding,
                 encoder_queue_maxsize=config.dataset.encoder_queue_maxsize,
             )
+        initial_episodes = dataset.num_episodes
         # Dataset contract is complete before either connect call.
         robot.connect()
         teleop.connect()
@@ -182,13 +225,17 @@ def main() -> int:
                 emit("phase", phase="recording")
 
                 watcher_stop = threading.Event()
+
                 def watcher(stop_event: threading.Event = watcher_stop) -> None:
-                    announced = False
-                    while not stop_event.wait(0.05):
+                    last_count = 0
+                    # Five updates per second are enough for the operator UI
+                    # and avoid turning per-frame telemetry into log spam.
+                    while not stop_event.wait(0.2):
                         count = buffer_frames(dataset)
-                        if count and not announced:
+                        if count > last_count:
                             emit("record_frame", frames=count)
-                            announced = True
+                            last_count = count
+
                 thread = threading.Thread(target=watcher, daemon=True)
                 thread.start()
                 record_loop(
@@ -208,7 +255,9 @@ def main() -> int:
                 watcher_stop.set()
                 thread.join(timeout=0.2)
                 frames = buffer_frames(dataset)
-                trigger = commands.get_nowait() if not commands.empty() else {"command": "finish_episode"}
+                trigger = (
+                    commands.get_nowait() if not commands.empty() else {"command": "finish_episode"}
+                )
                 if trigger.get("command") == "rerecord":
                     dataset.clear_episode_buffer()
                     emit("episode_discarded", reason="operator_rerecord")
@@ -219,8 +268,15 @@ def main() -> int:
                     emit("fault", reason="Refused to save a zero-frame episode")
                     return 2
                 emit("phase", phase="saving", frames=frames)
-                dataset.save_episode()
+                save_episode_without_fork(dataset)
                 emit("saving_complete", total_episodes=dataset.num_episodes)
+                if session_is_complete(
+                    initial_episodes=initial_episodes,
+                    current_episodes=dataset.num_episodes,
+                    requested_additions=config.dataset.num_episodes,
+                ):
+                    emit("phase", phase="finished")
+                    return 0
                 emit("phase", phase="resetting")
                 while True:
                     reset = commands.get()
@@ -250,6 +306,8 @@ def main() -> int:
             robot.disconnect()
         if teleop.is_connected:
             teleop.disconnect()
+        if rerun_started:
+            shutdown_rerun()
     return 0
 
 

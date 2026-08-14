@@ -1,21 +1,20 @@
-from __future__ import annotations
+from types import SimpleNamespace
+
+from app.schemas.workflows import RecordingRequest
+from app.services.workflows import DatasetCompatibilityService
 
 
-def test_mock_resume_reports_existing_and_14d_contract(client):
-    response = client.post(
-        "/api/record/compatibility",
-        json={"resume": True, "dataset": {"root": "datasets/existing"}},
+def test_new_dataset_rejects_an_existing_root_before_starting_worker(tmp_path) -> None:
+    existing = tmp_path / "datasets" / "already-there"
+    existing.mkdir(parents=True)
+    service = DatasetCompatibilityService(SimpleNamespace(project_root=tmp_path, mock=False))
+    payload = RecordingRequest(
+        safety_confirmed=True,
+        dataset={"root": "datasets/already-there", "repo_id": "local/already-there"},
     )
-    assert response.status_code == 200
-    report = response.json()
-    assert report["compatible"] is True
-    assert report["existing_episodes"] == 25
-    assert report["expected"]["state_dim"] == 14
 
+    report = service.inspect(payload)
 
-def test_workflow_schema_exposes_safety_metadata(client):
-    response = client.get("/api/schema/inference")
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["schema"]["properties"]["max_joint_delta"]["maximum"] == 0.5
-    assert payload["ui"]["max_joint_delta"]["danger_level"] == "safety"
+    assert report["compatible"] is False
+    assert report["checks"]["new_dataset_path_available"] is False
+    assert report["reason"] == "dataset_root_exists"

@@ -4,9 +4,21 @@ export type TaskStatus =
 
 export type HealthState = 'healthy' | 'degraded' | 'fault' | 'offline' | 'unknown'
 
+export interface RerunRuntime {
+  enabled: boolean
+  mock?: boolean
+  web_port?: number
+  grpc_port?: number
+  url?: string
+  grpc_url?: string
+  cameras: string[]
+}
+
+export type TaskMetadata = Record<string, unknown> & { rerun?: RerunRuntime }
+
 export interface TaskInfo {
   task_id: string
-  task_type: 'calibration' | 'pairing' | 'teleoperation' | 'recording' | 'inference'
+  task_type: 'camera_preview' | 'calibration' | 'pairing' | 'teleoperation' | 'recording' | 'inference'
   status: TaskStatus
   phase: string
   pid: number | null
@@ -15,13 +27,15 @@ export interface TaskInfo {
   health: Record<string, HealthState>
   message: string | null
   mock: boolean
-  metadata?: Record<string, unknown>
+  metadata?: TaskMetadata
   record_phase?: 'ready' | 'recording' | 'saving' | 'resetting' | 'finished' | 'fault'
   episode_index?: number
   existing_episodes?: number
   add_episodes?: number
   total_after_session?: number
   frames?: number
+  episode_time_s?: number
+  remaining_time_s?: number | null
   quick_next_armed?: boolean
   current_episode_invalid?: boolean
   last_trusted_episode?: number
@@ -82,7 +96,7 @@ export interface PreflightIssue {
 export interface PreflightReport {
   ready: boolean
   simulation: boolean
-  workflow: 'calibration' | 'pairing' | 'teleoperation' | 'recording' | 'inference'
+  workflow: 'camera_preview' | 'calibration' | 'pairing' | 'teleoperation' | 'recording' | 'inference'
   mode: 'mock' | 'real'
   issues: PreflightIssue[]
   inventory: DeviceInventory

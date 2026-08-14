@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Query, Request, WebSocket, WebSocketDisconnect, status
 
 from app.core.errors import ApiError
-from app.models.tasks import TaskStatus, TaskType
+from app.models.tasks import EventEnvelope, TaskStatus, TaskType
 from app.schemas.workflows import (
     CalibrationStartRequest,
+    CameraPreviewRequest,
     CanInitializeRequest,
     DomainAction,
     InferenceRequest,
@@ -28,6 +31,41 @@ from app.services.record_state import RecordSession
 
 router = APIRouter()
 ws_router = APIRouter()
+
+
+async def _stream_events(
+    websocket: WebSocket,
+    queue: asyncio.Queue[EventEnvelope],
+    include: Callable[[EventEnvelope], bool],
+) -> None:
+    """Forward events while also consuming ASGI disconnect notifications.
+
+    Waiting only on ``queue.get()`` leaves an idle socket alive forever after
+    the browser closes it.  In development that also prevents Uvicorn's old
+    worker from completing a hot reload.
+    """
+
+    receive_task = asyncio.create_task(websocket.receive())
+    event_task = asyncio.create_task(queue.get())
+    try:
+        while True:
+            done, _pending = await asyncio.wait(
+                {receive_task, event_task}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if receive_task in done:
+                message = receive_task.result()
+                if message["type"] == "websocket.disconnect":
+                    return
+                receive_task = asyncio.create_task(websocket.receive())
+            if event_task in done:
+                event = event_task.result()
+                if include(event):
+                    await websocket.send_json(event.model_dump(mode="json"))
+                event_task = asyncio.create_task(queue.get())
+    finally:
+        receive_task.cancel()
+        event_task.cancel()
+        await asyncio.gather(receive_task, event_task, return_exceptions=True)
 
 
 def services(request: Request):
@@ -225,6 +263,32 @@ async def teleop_preflight(payload: TeleoperationRequest, request: Request):
     return await inspect_preflight("teleoperation", payload, request)
 
 
+@router.post("/camera-preview/start", status_code=status.HTTP_201_CREATED)
+async def start_camera_preview(payload: CameraPreviewRequest, request: Request):
+    """Open only selected cameras; never construct A1Z or Leader objects."""
+
+    svc = services(request)
+    selected = {
+        name: camera
+        for name, camera in payload.cameras.items()
+        if camera.enabled and camera.serial
+    }
+    if not svc.settings.mock:
+        inventory = await svc.health.discover_devices()
+        available = {item["serial"] for item in inventory["cameras"]}
+        missing = sorted(camera.serial for camera in selected.values() if camera.serial not in available)
+        if missing:
+            raise ApiError(
+                "camera_unavailable",
+                "部分所选相机未被系统识别",
+                status_code=409,
+                details={"missing_serials": missing, "action": "检查 USB 连接并在设备中心重新检测。"},
+            )
+    metadata = {"config": payload.model_dump(mode="json"), "camera_only": True}
+    argv = svc.commands.camera_preview(payload)
+    return await svc.tasks.start(TaskType.CAMERA_PREVIEW, set(selected), argv=argv, metadata=metadata)
+
+
 @router.post("/teleop/{task_id}/stop")
 async def stop_teleop(task_id: str, request: Request):
     return await services(request).tasks.stop(task_id)
@@ -384,9 +448,10 @@ async def start_record(payload: RecordingRequest, request: Request):
     svc = services(request)
     report = svc.datasets.inspect(payload)
     if not report["compatible"]:
+        dataset_exists = report.get("reason") == "dataset_root_exists"
         raise ApiError(
-            "resume_schema_incompatible",
-            "Dataset contract is incompatible with the selected A1Z workflow",
+            "dataset_root_exists" if dataset_exists else "resume_schema_incompatible",
+            report.get("message", "Dataset contract is incompatible with the selected A1Z workflow"),
             details=report,
             status_code=409,
         )
@@ -395,7 +460,11 @@ async def start_record(payload: RecordingRequest, request: Request):
     info = await svc.tasks.start(TaskType.RECORDING, motion_resources(payload), argv=argv, metadata={"config": payload.model_dump(mode="json")})
     runtime = svc.tasks.get(info.task_id)
     existing = svc.dataset_existing_episodes(payload)
-    runtime.record = RecordSession(existing_episodes=existing, add_episodes=payload.dataset.num_episodes)
+    runtime.record = RecordSession(
+        existing_episodes=existing,
+        add_episodes=payload.dataset.num_episodes,
+        episode_time_s=payload.dataset.episode_time_s,
+    )
     return info
 
 
@@ -418,6 +487,8 @@ def record_payload(session: RecordSession) -> dict[str, Any]:
         "total_after_session": session.existing_episodes + session.add_episodes,
         "saved_episodes": session.saved_episodes,
         "frames": session.frames,
+        "episode_time_s": session.episode_time_s,
+        "remaining_time_s": session.remaining_time_s(),
         "quick_next_armed": session.quick_next_armed,
         "current_episode_invalid": session.current_episode_invalid,
         "last_trusted_episode": session.last_trusted_episode,
@@ -430,6 +501,13 @@ async def record_command(task_id: str, action: RecordAction, command: str, reque
     runtime = svc.tasks.get(task_id)
     if runtime.info.task_type is not TaskType.RECORDING or runtime.record is None:
         raise ApiError("wrong_task_type", "Task is not a recording task", status_code=409)
+    if runtime.info.status not in {TaskStatus.READY, TaskStatus.RUNNING}:
+        raise ApiError(
+            "task_not_ready",
+            "Recording worker has not completed its ready handshake",
+            details={"status": runtime.info.status.value, "phase": runtime.info.phase},
+            status_code=409,
+        )
     if not runtime.record.is_duplicate(action.client_action_id) and action.episode_index != runtime.record.episode_index:
         raise ApiError(
             "stale_episode_action",
@@ -554,9 +632,7 @@ async def websocket_events(websocket: WebSocket, last_seq: int = 0):
     svc = websocket.app.state.services
     queue = await svc.events.subscribe(last_seq)
     try:
-        while True:
-            event = await queue.get()
-            await websocket.send_json(event.model_dump(mode="json"))
+        await _stream_events(websocket, queue, lambda _event: True)
     except WebSocketDisconnect:
         pass
     finally:
@@ -570,10 +646,7 @@ async def websocket_task(task_id: str, websocket: WebSocket, last_seq: int = 0):
     svc.tasks.get(task_id)
     queue = await svc.events.subscribe(last_seq)
     try:
-        while True:
-            event = await queue.get()
-            if event.task_id == task_id:
-                await websocket.send_json(event.model_dump(mode="json"))
+        await _stream_events(websocket, queue, lambda event: event.task_id == task_id)
     except WebSocketDisconnect:
         pass
     finally:

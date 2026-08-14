@@ -3,6 +3,8 @@ from __future__ import annotations
 import time
 from unittest.mock import AsyncMock
 
+from app.models.tasks import TaskStatus
+
 
 def wait_ready(client, task_id: str) -> dict:
     deadline = time.monotonic() + 2
@@ -62,6 +64,26 @@ def test_mock_teleop_hardware_lock_and_idempotent_stop(client):
     assert first.status_code == second.status_code == 200
 
 
+def test_camera_preview_owns_only_cameras_and_never_robot_resources(client):
+    response = client.post(
+        "/api/camera-preview/start",
+        json={
+            "cameras": {
+                "top_rgb": {"serial": "MOCK-TOP"},
+                "left_wrist_rgb": {"serial": "MOCK-LEFT"},
+                "right_wrist_rgb": {"serial": "MOCK-RIGHT"},
+            }
+        },
+    )
+
+    assert response.status_code == 201
+    task = response.json()
+    assert task["task_type"] == "camera_preview"
+    assert task["resources"] == ["left_wrist_rgb", "right_wrist_rgb", "top_rgb"]
+    assert not ({"can0", "can1", "a1z_left", "a1z_right", "leader_left", "leader_right"} & set(task["resources"]))
+    client.post(f"/api/tasks/{task['task_id']}/stop")
+
+
 def test_recording_domain_api_and_zero_frame_guard(client):
     started = client.post("/api/record/start", json={"safety_confirmed": True})
     assert started.status_code == 201
@@ -83,6 +105,22 @@ def test_recording_domain_api_and_zero_frame_guard(client):
     finished = client.post(f"/api/record/{task_id}/finish-episode", json={"client_action_id": "y", "episode_index": 0})
     assert finished.status_code == 200
     assert finished.json()["record_phase"] == "saving"
+
+
+def test_record_command_is_rejected_until_worker_ready(client):
+    started = client.post("/api/record/start", json={"safety_confirmed": True})
+    assert started.status_code == 201
+    task_id = started.json()["task_id"]
+    runtime = client.app.state.services.tasks.get(task_id)
+    runtime.info.status = TaskStatus.STARTING
+
+    response = client.post(
+        f"/api/record/{task_id}/start-episode",
+        json={"client_action_id": "too-early", "episode_index": 0},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "task_not_ready"
 
 
 def test_inference_requires_compatibility_gate(client):

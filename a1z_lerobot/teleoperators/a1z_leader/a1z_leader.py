@@ -91,7 +91,17 @@ class A1ZLeader(Teleoperator):
         logger.info("%s connected.", self)
 
     def calibrate(self) -> None:
+        if self.config.auto_use_calibration and not self.calibration:
+            raise RuntimeError(
+                f"No saved calibration found for {self.id}; complete Leader calibration before starting this workflow."
+            )
         if self.calibration:
+            if self.config.auto_use_calibration:
+                self.bus.write_calibration(self.calibration)
+                logger.info(
+                    "Using existing calibration for %s without an interactive prompt.", self.id
+                )
+                return
             answer = input(
                 f"Press ENTER to use calibration for {self.id}, or type 'c' then ENTER to recalibrate: "
             )
@@ -106,10 +116,7 @@ class A1ZLeader(Teleoperator):
         input(f"Move {self} to the middle of every joint range and press ENTER...")
         homing_offsets = self.bus.set_half_turn_homings()
         ranged_motors = [*JOINT_NAMES, "gripper"]
-        print(
-            "Move arm_0..arm_5 and gripper through their full ranges. "
-            "Press ENTER to stop."
-        )
+        print("Move arm_0..arm_5 and gripper through their full ranges. Press ENTER to stop.")
         range_mins, range_maxes = self.bus.record_ranges_of_motion(ranged_motors)
 
         self.calibration = {

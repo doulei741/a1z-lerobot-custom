@@ -50,6 +50,65 @@ def test_leader_default_mapping_reverses_first_and_sixth_joint():
     assert config.joint_offsets_rad == pytest.approx(
         (-0.040418965, 1.567886653, -1.698370257, -0.144229406, -0.011507665, -0.016411362)
     )
+    assert config.auto_use_calibration is False
+
+
+def test_web_mode_can_apply_existing_calibration_without_stdin(monkeypatch, tmp_path):
+    import a1z_lerobot.teleoperators.a1z_leader.a1z_leader as leader_module
+    from a1z_lerobot.teleoperators.a1z_leader.config_a1z_leader import A1ZLeaderConfig
+
+    class FakeBus:
+        def __init__(self, *, port, motors, calibration):
+            self.motors = motors
+            self.written_calibration = None
+
+        def write_calibration(self, calibration):
+            self.written_calibration = calibration
+
+    monkeypatch.setattr(leader_module, "FeetechMotorsBus", FakeBus)
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda prompt: (_ for _ in ()).throw(AssertionError("stdin prompt is forbidden")),
+    )
+    leader = leader_module.A1ZLeader(
+        A1ZLeaderConfig(
+            id="web_existing",
+            port="/dev/ttyACM7",
+            calibration_dir=tmp_path,
+            auto_use_calibration=True,
+        )
+    )
+    leader.calibration = {"existing": object()}
+
+    leader.calibrate()
+
+    assert leader.bus.written_calibration is leader.calibration
+
+
+def test_web_mode_fails_instead_of_prompting_when_calibration_is_missing(monkeypatch, tmp_path):
+    import a1z_lerobot.teleoperators.a1z_leader.a1z_leader as leader_module
+    from a1z_lerobot.teleoperators.a1z_leader.config_a1z_leader import A1ZLeaderConfig
+
+    class FakeBus:
+        def __init__(self, *, port, motors, calibration):
+            self.motors = motors
+
+    monkeypatch.setattr(leader_module, "FeetechMotorsBus", FakeBus)
+    monkeypatch.setattr(
+        "builtins.input",
+        lambda prompt: (_ for _ in ()).throw(AssertionError("stdin prompt is forbidden")),
+    )
+    leader = leader_module.A1ZLeader(
+        A1ZLeaderConfig(
+            id="web_missing",
+            port="/dev/ttyACM7",
+            calibration_dir=tmp_path,
+            auto_use_calibration=True,
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="No saved calibration.*web_missing"):
+        leader.calibrate()
 
 
 @pytest.mark.parametrize(

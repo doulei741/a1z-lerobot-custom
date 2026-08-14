@@ -97,6 +97,54 @@ test('a task started in the current page still reports an immediate failure', as
 
   expect(await screen.findByRole('heading', { name: '设备检查未通过' })).toBeInTheDocument()
   expect(screen.getByText('camera unavailable')).toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('button', { name: '关闭' }))
+  await waitFor(() => expect(usePlatformStore.getState().activeTaskId).toBeNull())
+})
+
+test('record controls refresh frames and keep normal stop available while recording', async () => {
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/system/health')) return jsonResponse({ mode: 'mock', status: 'healthy', resources: {} })
+    if (/\/tasks\/record-live$/.test(url)) return jsonResponse({
+      task_id: 'record-live', task_type: 'recording', status: 'ready', phase: 'ready',
+      record_phase: 'recording', frames: 3, episode_index: 0, remaining_time_s: 42,
+      episode_time_s: 60, health: {}, mock: true,
+    })
+    if (url.includes('/calibration/profiles')) return jsonResponse({ items: [] })
+    if (url.includes('/devices')) return jsonResponse({ mock: true, can: [], leaders: [], cameras: [] })
+    return jsonResponse([])
+  }))
+  usePlatformStore.getState().setActiveTask('record-live', 'recording')
+
+  render(<App initialPath="/recording" disableRealtime />)
+
+  expect(await screen.findByText('3')).toBeInTheDocument()
+  expect(screen.getByText('00:42')).toBeInTheDocument()
+  expect(screen.getByText('本轮剩余')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '提前结束并保存' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: '正常停止整个任务' })).toBeEnabled()
+})
+
+test('recording explains why controls are locked during atomic video saving', async () => {
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/system/health')) return jsonResponse({ mode: 'mock', status: 'healthy', resources: {} })
+    if (/\/tasks\/record-saving$/.test(url)) return jsonResponse({
+      task_id: 'record-saving', task_type: 'recording', status: 'ready', phase: 'saving',
+      record_phase: 'saving', frames: 213, episode_index: 0, add_episodes: 2,
+      health: {}, mock: true,
+    })
+    if (url.includes('/calibration/profiles')) return jsonResponse({ items: [] })
+    if (url.includes('/devices')) return jsonResponse({ mock: true, can: [], leaders: [], cameras: [] })
+    return jsonResponse([])
+  }))
+  usePlatformStore.getState().setActiveTask('record-saving', 'recording')
+
+  render(<App initialPath="/recording" disableRealtime />)
+
+  expect(await screen.findByText(/正在保存 Episode 并编码视频/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: '正常停止整个任务' })).toBeDisabled()
 })
 
 test('teleoperation preflight blocks task start and shows recovery steps', async () => {

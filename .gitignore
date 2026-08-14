@@ -17,3 +17,12 @@ docs
 !a1z_web/deploy/**
 .worktrees/
 legacy/
+
+# Local robot datasets and trained checkpoints are intentionally not versioned.
+datasets/
+outputs/
+checkpoints/
+*.safetensors
+*.pt
+*.pth
+*.ckpt

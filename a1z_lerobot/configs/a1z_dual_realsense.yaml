@@ -28,7 +28,7 @@ robot:
       fps: 30
       color_mode: rgb
       use_depth: false
-  ema_alpha: 0.3
+  ema_alpha: 0.8
   max_joint_delta: 0.05
   gripper_start_hold: false
   return_home_on_disconnect: false

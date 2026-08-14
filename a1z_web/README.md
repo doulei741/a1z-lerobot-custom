@@ -64,6 +64,14 @@ export A1Z_WEB_ALLOW_HARDWARE=0
 
 `dev.sh` 会监督前后端两个进程。若 8000 端口已被旧后端占用，脚本会直接退出并提示端口冲突，不会继续留下一个所有请求都 pending 的孤立前端；前后端任一进程异常退出时，另一侧也会被停止。前端固定使用 `${A1Z_WEB_FRONTEND_PORT:-5173}` 且启用 strict port，避免 Vite 静默改到另一个端口。
 
+如果上一次关闭终端、IDE 或调试会话后，旧开发进程仍占用 8000/5173，直接运行：
+
+```bash
+./scripts/restart-dev.sh
+```
+
+该脚本只会停止工作目录属于本项目、且祖先进程确认为 `scripts/dev.sh` 的服务，不使用 `pkill`/`killall`。停止前还会查询后端活动任务；若遥控、录制、推理、校准或相机预览仍在运行，它会拒绝退出，并要求先在 Web 中执行“软件停止”。只停止而不重新启动可运行 `./scripts/stop-dev.sh`。
+
 也可分别运行 `./scripts/dev-backend.sh` 与 `./scripts/dev-frontend.sh`。前端为 `http://127.0.0.1:5173`，Vite 将 `/api` 和 `/ws` 代理到后端。
 
 生产构建：
@@ -131,13 +139,13 @@ Web 启动后，点击顶部“设备准备中心”：
 
 ### Teleoperation
 
-支持 Single/Dual、CAN、Leader port/id、6 轴 sign/scale/offset、FPS、EMA、`max_joint_delta`、夹爪启动保持、退出 Home/张开、Rerun `display_data`/压缩显示，以及无相机/启用 RGB 相机、序列号、宽高与相机 FPS。选择“Configured RGB cameras”时页面会自动启用 `display_data`，启动任务后由 LeRobot 调用 `rr.spawn()` 打开独立 Rerun Viewer；画面不会嵌入浏览器，避免 Web 后端重复占用 RealSense。用户仍可通过相机配置下方的开关显式关闭 Rerun。高级设置可填写 `teleop_time_s`；留空表示无限时遥控，只通过 Safe Stop 结束。`gripper_start_hold` 的 Web 默认值为 `false`，即直接使用校准与 Pairing 后的绝对夹爪目标；如果现场需要避免初始夹爪跳变，可以显式开启。默认映射来自当前现场验证配置；Single 与 Dual 映射不同。真实 worker 代理 `a1z-teleoperate-single/dual`，ready 依赖 A1Z CLI 的真实连接日志，不以“进程存在”冒充 ready。
+支持 Single/Dual、CAN、Leader port/id、6 轴 sign/scale/offset、FPS、EMA、`max_joint_delta`、夹爪启动保持、退出 Home/张开、Rerun `display_data`/压缩显示，以及无相机/启用 RGB 相机、每路相机开关、序列号、宽高与相机 FPS。选择“Configured RGB cameras”时页面会自动启用 `display_data`。TaskManager 为该任务分配本机动态 Rerun Web/gRPC 端口，LeRobot 任务把同一次 `robot.get_observation()` 发送到 Rerun，页面在 ready 握手后嵌入 Rerun Web Viewer，也可在新窗口打开。Web 后端不会再次打开 RealSense。页面另有“仅预览相机（不启动机械臂）”：该任务只锁定所选 RealSense，使用压缩 Rerun 图像，不创建 A1Z Robot、Leader、CAN session 或 `send_action()` 循环，适合在运动前核对三路构图。用户仍可显式关闭 Rerun；关闭后相机仍可供任务观测，但页面没有实时预览。高级设置可填写 `teleop_time_s`；留空表示无限时遥控，只通过 Safe Stop 结束。`gripper_start_hold` 的 Web 默认值为 `false`，即直接使用校准与 Pairing 后的绝对夹爪目标；如果现场需要避免初始夹爪跳变，可以显式开启。默认映射来自当前现场验证配置；Single 与 Dual 映射不同。真实 worker 代理 `a1z-teleoperate-single/dual`，ready 依赖 A1Z CLI 的真实连接日志，不以“进程存在”冒充 ready。
 
 ### Recording
 
 worker 复用 `RecordConfig`、`make_robot_from_config()`、`make_teleoperator_from_config()`、`record_loop()`、`LeRobotDataset.create/resume()`、`sanity_check_dataset_robot_compatibility()` 和 `VideoEncodingManager`。不再模拟方向键，而使用 stdin JSON 领域协议。
 
-页面可调整录制 YAML、Dataset repo/root/task、Resume 与 Episode 数量、Episode/Reset 时间、外层与 Dataset FPS、视频开关、三相机序列号/480p 尺寸、CAN、Leader port/id、Pairing profile、EMA、`max_joint_delta`、夹爪启动保持、退出行为、Rerun 和压缩图显示。高级设置还提供真实 `DatasetRecordConfig` 参数：写图进程数、每相机写图线程数、视频批大小、流式编码、编码队列、编码线程、codec、CRF、preset、GOP、fast decode 与声音提示。默认保持当前稳定值；只有实测录制 FPS 或保存耗时存在问题时才调整。所有值通过 Pydantic 验证并传入现有 `RecordConfig`，相机始终为 RGB、`use_depth=false`，不接受自由 CLI 参数。
+页面可调整录制 YAML、Dataset repo/root/task、Resume 与 Episode 数量、Episode/Reset 时间、外层与 Dataset FPS、视频开关、每路相机启用状态及序列号/480p 尺寸、CAN、Leader port/id、Pairing profile、EMA、`max_joint_delta`、夹爪启动保持、退出行为、Rerun 和压缩图显示。录制 worker 在连接硬件前初始化同一个任务专属 Rerun Web sink；`record_loop()` 读取的观测同时用于 Dataset 与嵌入画面，不增加第二套相机采集。高级设置还提供真实 `DatasetRecordConfig` 参数：写图进程数、每相机写图线程数、视频批大小、流式编码、编码队列、编码线程、codec、CRF、preset、GOP、fast decode 与声音提示。默认保持当前稳定值；只有实测录制 FPS 或保存耗时存在问题时才调整。所有值通过 Pydantic 验证并传入现有 `RecordConfig`，相机始终为 RGB、`use_depth=false`，不接受自由 CLI 参数。禁用某一路相机会同步改变 Dataset camera keys，Resume compatibility 会按启用后的真实键重新检查。
 
 录制页面的 `gripper_start_hold` 默认同样为 `false`。这会让录制标签对应校准/Pairing 后的绝对 Leader 夹爪目标；启动前必须确认 Leader 与 Follower 夹爪姿态一致。若某次任务确实需要“从当前 Follower 开度开始做相对保持”，可在高级设置显式开启。
 
@@ -147,7 +155,17 @@ worker 复用 `RecordConfig`、`make_robot_from_config()`、`make_teleoperator_f
 - Record protocol：`ready/recording/saving/resetting/finished/fault`
 - Frontend：由服务端阶段派生 `waiting_ready/recording/saving/resetting/waiting_next/completed/fault`
 
-正常流程：`ready → start_episode → recording → finish/quick_next → saving → saving_complete → resetting → reset_done → ready`。Quick Next 只是在合法阶段 arm 自动继续，绝不跳过保存和 Reset。每个命令含 `client_action_id` 并幂等；非法阶段返回 409。首帧未写入时 Finish/Quick Next 被拒绝，防止空 Episode。
+正常流程：`ready → start_episode → recording → finish/quick_next → saving → saving_complete → resetting → reset_done → ready`。Quick Next 只是在合法阶段 arm 自动继续，绝不跳过保存和 Reset。每个命令含 `client_action_id` 并幂等；非法阶段返回 409。首帧未写入时 Finish/Quick Next 被拒绝，防止空 Episode。真实 Worker 从当前 LeRobot 的 `DatasetWriter.episode_buffer["size"]` 读取并以 5 Hz 同步帧数；第一帧到达后 Finish/Quick Next 自动解锁，`Current Frames` 持续更新。Worker 未完成 `ready` 握手前，所有 Episode 命令同样返回 409；自然到时与手动提前结束都会同步进入同一个 `saving` 状态。
+
+保存视频时明确使用 `dataset.save_episode(parallel_encoding=False)`。原因是 A1Z、RealSense 与 Rerun 已经启动多个线程，在此之后使用 Linux `fork` 创建三相机编码进程可能让子进程永久阻塞在 `futex_wait_queue`，表现为页面一直停在 `SAVING`、永远没有 `saving_complete`。当前方案在 Worker 主进程中顺序编码三路视频，保存时间可能略长，但不会从持有硬件线程的进程继续 fork。
+
+`Add Episodes` 是“本次录制 Session 计划新增的轮数”。设为 1 时，第一轮保存完成后任务自动结束并安全断开；需要在同一 Session 连续录制时应设置为大于 1。普通路径是“提前结束并保存 → 保存完成 → 重置完成 → 开始本轮 Episode”；Quick Next 路径是“快速开始下一轮 → 保存完成 → 重置完成 → 自动开始下一轮”。两条路径都必须等待视频保存和人工 Reset 确认。
+
+录制状态区显示由后端 Episode 起始时间计算的 `本轮剩余 MM:SS`，任务不在 `recording` 阶段时显示 `--:--`，避免浏览器后台计时与真实录制阶段漂移。四个工作流均使用固定视口工作区：浏览器正文不滚动，标题、状态与主操作保持可见；遥控、录制、推理的参数卡片独立滚动，Calibration 的长卡片也在各自区域内滚动。
+
+“正常停止整个任务”用于结束本次录制 Session，而不是保存当前 Episode：它保留已经完成原子保存的 Episode，丢弃当前尚未保存的帧，随后按 graceful shutdown 关闭 Leader、Robot、相机和子进程。`saving` 阶段暂时禁止停止，避免打断 Dataset 原子保存；到 `resetting` 后可以停止。发生 fault 后关闭故障提示会释放前端的旧任务引用，修正配置即可重新启动。
+
+新建数据集时，Compatibility 会先验证 Dataset Root 尚不存在；目录已存在会在连接 Rerun、CAN、Leader 或相机之前阻止启动，并提示选择 Resume 或更换 Root。录制页右侧配置卡片固定在视口内独立滚动，主状态、按钮与画面区域不会再随长参数表一起滚走。
 
 Resume 完全图形化：打开 Resume 后先执行 Compatibility，页面读取 Existing Episodes；操作者填写 Target Total，页面自动计算 Add Episodes，并把这个差值作为 LeRobot `dataset.num_episodes`。例如已有 25 集、目标 45 集，实际传给录制器的是新增 20 集。Target 必须大于 Existing，启动前仍验证 state/action 维度、feature/camera keys、480p 与 FPS。
 
@@ -199,7 +217,8 @@ pnpm exec playwright test
 ## Known limitations
 
 - 未实现 Pause/Hold、Reset Pose、碰撞/力矩检测，因为当前 A1Z 源码没有可验证的对应能力。
-- Rerun 作为独立观察面；没有安全 Frame Relay，因此不 iframe 伪造相机画面。
+- Rerun Web Viewer 只在启用 `display_data` 且至少选择一路相机时随任务启动。Viewer 使用动态本机端口且不带独立登录认证，平台定位为受信任的本地实验室网络，不应直接暴露到公网。
+- 嵌入画面依赖任务达到 `ready/running`；任务停止后 Rerun 服务随子进程关闭。自动测试验证 Web 契约与真实 Rerun HTTP 服务启动，但相机实际画面仍需现场验证。
 - Pairing read 需要短暂启动 A1Z SDK 才能读取 Follower，故被视为可能运动的硬件 session，并要求确认。
 - 全局设备发现能看到接口/枚举状态；电机级健康以运行 worker 的结构化事件为准。
 - 自动化只证明 Mock、API、状态机、进程和 UI 契约；真实 CAN、Leader、三相机、录制文件和 ACT 动作仍须依照 smoke checklist 现场验证。

@@ -69,6 +69,13 @@ export function AppShell({ children }: PropsWithChildren) {
       severity: 'blocking',
     }],
   } : null
+  const dismissFault = () => {
+    const failedTaskId = task.data?.task_id ?? null
+    setDismissedFault(failedTaskId)
+    if (failedTaskId && ['failed', 'faulted'].includes(task.data?.status ?? '')) {
+      setActiveTask(null)
+    }
+  }
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark"><Bot /></div><div><strong>A1Z LeRobot</strong><span>Control Platform</span></div></div>
@@ -88,6 +95,6 @@ export function AppShell({ children }: PropsWithChildren) {
     </div>
     <LogDrawer />
     <DeviceCenter open={deviceCenterOpen} onOpenChange={setDeviceCenterOpen} />
-    <PreflightDialog report={faultReport} onClose={() => setDismissedFault(task.data?.task_id ?? null)} onContinueSimulation={() => setDismissedFault(task.data?.task_id ?? null)} />
+    <PreflightDialog report={faultReport} onClose={dismissFault} onContinueSimulation={dismissFault} />
   </div>
 }

@@ -1,6 +1,5 @@
 import pytest
 
-
 LEFT_ACTION = {
     "arm_0.pos": 0.1,
     "arm_1.pos": 0.2,
@@ -24,7 +23,6 @@ RIGHT_ACTION = {
 
 def test_compose_dual_action_matches_follower_order_and_gripper_units():
     from a1z.robots.gripper import GRIPPER_CLOSE_RAD, GRIPPER_OPEN_RAD
-
     from a1z_lerobot.robots.a1z_follower.hardware.config import A1Z_DUAL
     from a1z_lerobot.teleoperators.bi_a1z_leader import compose_dual_action
 
@@ -110,6 +108,7 @@ def test_dual_leader_preserves_independent_child_configuration(monkeypatch):
         left_arm_config=A1ZLeaderConfigBase(
             port="/dev/ttyACM0",
             joint_signs=(-1, 1, 1, 1, 1, -1),
+            auto_use_calibration=True,
         ),
         right_arm_config=A1ZLeaderConfigBase(
             port="/dev/ttyACM1",
@@ -126,6 +125,8 @@ def test_dual_leader_preserves_independent_child_configuration(monkeypatch):
     assert [child.config.port for child in created] == ["/dev/ttyACM0", "/dev/ttyACM1"]
     assert created[0].config.joint_signs == (-1, 1, 1, 1, 1, -1)
     assert created[1].config.joint_signs == (1, -1, -1, 1, 1, 1)
+    assert created[0].config.auto_use_calibration is True
+    assert created[1].config.auto_use_calibration is False
     assert action["left_arm_0.pos"] == pytest.approx(0.1)
     assert action["right_arm_0.pos"] == pytest.approx(1.1)
     assert not leader.is_connected

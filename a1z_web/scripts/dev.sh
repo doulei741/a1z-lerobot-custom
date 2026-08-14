@@ -24,7 +24,7 @@ BACKEND_PID=$!
 sleep 0.8
 if ! kill -0 "${BACKEND_PID}" 2>/dev/null; then
   wait "${BACKEND_PID}" || status=$?
-  echo "A1Z Web backend failed to start. Check whether port ${A1Z_WEB_PORT:-8000} is already in use." >&2
+  echo "A1Z Web backend failed to start. If an earlier development server is still running, use ./scripts/restart-dev.sh." >&2
   exit "${status:-1}"
 fi
 

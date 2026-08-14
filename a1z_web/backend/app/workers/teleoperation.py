@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from common import boolean, cameras_argv, mapping_args, proxy_process, request_json
+from common import boolean, cameras_argv, mapping_args, proxy_process, request_json, rerun_web_ports
 
 
 def build_command(cfg: dict) -> list[str]:
@@ -20,6 +20,8 @@ def build_command(cfg: dict) -> list[str]:
             f"--teleop.right_id={cfg['right_leader_id']}",
             f"--teleop.left_arm_config.port={cfg['left_leader_port']}",
             f"--teleop.right_arm_config.port={cfg['right_leader_port']}",
+            "--teleop.left_arm_config.auto_use_calibration=true",
+            "--teleop.right_arm_config.auto_use_calibration=true",
         ]
         command += mapping_args("left_arm_config", cfg["left_mapping"])
         command += mapping_args("right_arm_config", cfg["right_mapping"])
@@ -29,6 +31,7 @@ def build_command(cfg: dict) -> list[str]:
             "--teleop.type=a1z_leader",
             f"--teleop.id={cfg['left_leader_id']}",
             f"--teleop.port={cfg['left_leader_port']}",
+            "--teleop.auto_use_calibration=true",
         ]
         command += mapping_args("", cfg["left_mapping"])
         command = [item.replace("--teleop..", "--teleop.") for item in command]
@@ -42,12 +45,20 @@ def build_command(cfg: dict) -> list[str]:
         f"--display_data={boolean(cfg['display_data'])}",
         f"--display_compressed_images={boolean(cfg['display_compressed_images'])}",
     ]
+    ports = rerun_web_ports()
+    if ports is not None:
+        _, grpc_port = ports
+        command += ["--display_ip=127.0.0.1", f"--display_port={grpc_port}"]
     if cfg.get("teleop_time_s") is not None:
         command.append(f"--teleop_time_s={cfg['teleop_time_s']}")
     if mode == "dual":
-        command.append(f"--robot.open_grippers_on_disconnect={boolean(cfg['open_grippers_on_disconnect'])}")
+        command.append(
+            f"--robot.open_grippers_on_disconnect={boolean(cfg['open_grippers_on_disconnect'])}"
+        )
     return command
 
 
 if __name__ == "__main__":
-    raise SystemExit(proxy_process(build_command(request_json()), ("A1Z connected.", "A1ZSingle connected.")))
+    raise SystemExit(
+        proxy_process(build_command(request_json()), ("A1Z connected.", "A1ZSingle connected."))
+    )

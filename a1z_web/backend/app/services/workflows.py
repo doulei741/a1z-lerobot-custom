@@ -13,6 +13,7 @@ from app.core.config import Settings
 from app.core.errors import ApiError
 from app.schemas.workflows import (
     CalibrationStartRequest,
+    CameraPreviewRequest,
     InferenceRequest,
     PairingReadRequest,
     PolicyInspectRequest,
@@ -41,6 +42,9 @@ class CommandBuilder:
 
     def teleoperation(self, payload: TeleoperationRequest) -> list[str]:
         return self._worker("teleoperation", payload)
+
+    def camera_preview(self, payload: CameraPreviewRequest) -> list[str]:
+        return self._worker("camera_preview", payload)
 
     def recording(self, payload: RecordingRequest) -> list[str]:
         return self._worker("recording", payload)
@@ -233,18 +237,44 @@ class DatasetCompatibilityService:
 
     def inspect(self, payload: RecordingRequest) -> dict[str, Any]:
         expected_dim = 14 if payload.mode == "dual" else 7
-        expected_cameras = set(payload.cameras) if payload.cameras else (
+        expected_cameras = (
+            {name for name, camera in payload.cameras.items() if camera.enabled}
+            if payload.cameras
+            else (
             {"top_rgb", "left_wrist_rgb", "right_wrist_rgb"}
             if payload.mode == "dual"
             else {"top_rgb", "wrist_rgb"}
+            )
         )
         if not payload.resume:
+            dataset_root = self.settings.project_root / payload.dataset.root
+            if not self.settings.mock and dataset_root.exists():
+                return {
+                    "compatible": False,
+                    "new_dataset": False,
+                    "existing_episodes": 0,
+                    "checks": {"new_dataset_path_available": False},
+                    "reason": "dataset_root_exists",
+                    "message": f"Dataset root already exists: {payload.dataset.root}",
+                    "action": "启用 Resume 并检查兼容性，或者填写一个尚不存在的新 Dataset Root。",
+                    "expected": {
+                        "state_dim": expected_dim,
+                        "action_dim": expected_dim,
+                        "fps": payload.dataset.fps,
+                        "camera_keys": sorted(expected_cameras),
+                    },
+                }
             return {
                 "compatible": True,
                 "new_dataset": True,
                 "existing_episodes": 0,
-                "checks": {"new_dataset": True},
-                "expected": {"state_dim": expected_dim, "action_dim": expected_dim, "fps": payload.dataset.fps},
+                "checks": {"new_dataset_path_available": True},
+                "expected": {
+                    "state_dim": expected_dim,
+                    "action_dim": expected_dim,
+                    "fps": payload.dataset.fps,
+                    "camera_keys": sorted(expected_cameras),
+                },
             }
         if self.settings.mock:
             return {
@@ -252,7 +282,12 @@ class DatasetCompatibilityService:
                 "new_dataset": False,
                 "existing_episodes": 25,
                 "checks": {"state": True, "action": True, "fps": True, "camera_keys": True, "resolution": True},
-                "expected": {"state_dim": expected_dim, "action_dim": expected_dim, "fps": payload.dataset.fps},
+                "expected": {
+                    "state_dim": expected_dim,
+                    "action_dim": expected_dim,
+                    "fps": payload.dataset.fps,
+                    "camera_keys": sorted(expected_cameras),
+                },
             }
         info_path = self.settings.project_root / payload.dataset.root / "meta" / "info.json"
         if not info_path.exists():

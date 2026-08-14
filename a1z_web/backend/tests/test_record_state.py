@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from app.core.errors import ApiError
@@ -57,3 +59,67 @@ def test_rerecord_discards_buffer_and_immediately_restarts_same_index():
     assert result.phase is RecordPhase.RECORDING
     assert session.episode_index == 0
     assert session.frames == 0
+
+
+@pytest.mark.parametrize("phase", [RecordPhase.READY, RecordPhase.RECORDING, RecordPhase.RESETTING])
+def test_normal_stop_is_available_outside_the_atomic_saving_phase(phase):
+    session = RecordSession(existing_episodes=0, add_episodes=3, phase=phase)
+
+    result = session.apply("stop", f"stop-{phase.value}")
+
+    assert result.phase is RecordPhase.FINISHED
+
+
+def test_normal_stop_waits_for_atomic_episode_save():
+    session = RecordSession(existing_episodes=0, add_episodes=3, phase=RecordPhase.SAVING)
+
+    with pytest.raises(ApiError) as exc:
+        session.apply("stop", "stop-saving")
+
+    assert exc.value.code == "record_busy"
+
+
+def test_worker_natural_timeout_enters_saving_before_save_completion():
+    session = RecordSession(existing_episodes=0, add_episodes=2)
+    session.apply("start_episode", "start")
+
+    session.begin_saving_from_worker(frames=42)
+    assert session.phase is RecordPhase.SAVING
+    assert session.frames == 42
+
+    session.apply_system("saving_complete")
+    assert session.phase is RecordPhase.RESETTING
+    assert session.saved_episodes == 1
+
+
+def test_worker_saving_event_is_idempotent_after_manual_finish():
+    session = RecordSession(existing_episodes=0, add_episodes=1)
+    session.apply("start_episode", "start")
+    session.note_frame()
+    session.apply("finish_episode", "finish")
+
+    session.begin_saving_from_worker(frames=20)
+    assert session.phase is RecordPhase.SAVING
+    assert session.frames == 20
+
+
+def test_recording_countdown_tracks_episode_and_clears_outside_recording():
+    started = datetime(2026, 8, 14, 13, 0, tzinfo=UTC)
+    session = RecordSession(existing_episodes=0, add_episodes=1, episode_time_s=60)
+    session.apply("start_episode", "start", now=started)
+
+    assert session.remaining_time_s(started + timedelta(seconds=17.2)) == 43
+    session.note_frame()
+    session.apply("finish_episode", "finish")
+    assert session.remaining_time_s(started + timedelta(seconds=20)) is None
+
+
+def test_worker_frame_count_synchronizes_exactly_and_never_moves_backwards():
+    session = RecordSession(existing_episodes=0, add_episodes=1)
+    session.apply("start_episode", "start")
+
+    session.sync_frames_from_worker(1)
+    session.sync_frames_from_worker(25)
+    session.sync_frames_from_worker(24)
+
+    assert session.frames == 25

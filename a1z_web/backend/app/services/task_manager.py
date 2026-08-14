@@ -4,7 +4,9 @@ import asyncio
 import json
 import os
 import signal
+import socket
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -18,6 +20,47 @@ from app.services.event_bus import EventBus
 from app.services.hardware_manager import HardwareResourceManager
 
 TERMINAL = {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.FAULTED, TaskStatus.STOPPED}
+
+
+def allocate_loopback_port() -> int:
+    """Ask the OS for an unused local TCP port for a task-scoped Rerun server."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        return int(listener.getsockname()[1])
+
+
+def build_rerun_runtime(
+    metadata: dict[str, Any],
+    *,
+    allocate_port: Callable[[], int] = allocate_loopback_port,
+) -> dict[str, str]:
+    """Attach browser-viewer metadata and return child-only Rerun environment."""
+    config = metadata.get("config")
+    cameras = config.get("cameras", {}) if isinstance(config, dict) else {}
+    enabled_cameras = sorted(
+        name
+        for name, camera in cameras.items()
+        if isinstance(camera, dict) and camera.get("enabled", True) and camera.get("serial")
+    )
+    if not isinstance(config, dict) or not config.get("display_data") or not enabled_cameras:
+        metadata["rerun"] = {"enabled": False, "cameras": enabled_cameras}
+        return {}
+    web_port = int(allocate_port())
+    grpc_port = int(allocate_port())
+    while grpc_port == web_port:
+        grpc_port = int(allocate_port())
+    metadata["rerun"] = {
+        "enabled": True,
+        "web_port": web_port,
+        "grpc_port": grpc_port,
+        "url": f"http://127.0.0.1:{web_port}",
+        "grpc_url": f"rerun+http://127.0.0.1:{grpc_port}/proxy",
+        "cameras": enabled_cameras,
+    }
+    return {
+        "A1Z_RERUN_WEB_PORT": str(web_port),
+        "A1Z_RERUN_GRPC_PORT": str(grpc_port),
+    }
 
 
 @dataclass
@@ -61,6 +104,7 @@ class TaskManager:
         metadata: dict[str, Any] | None = None,
     ) -> TaskInfo:
         prefix = {
+            TaskType.CAMERA_PREVIEW: "camera-preview",
             TaskType.CALIBRATION: "calibrate",
             TaskType.PAIRING: "pair",
             TaskType.TELEOPERATION: "teleop",
@@ -69,6 +113,22 @@ class TaskManager:
         }[task_type]
         task_id = f"{prefix}-{uuid4().hex[:8]}"
         await self.hardware.acquire(task_id, resources)
+        task_metadata = dict(metadata or {})
+        rerun_environment: dict[str, str] = {}
+        if self.settings.mock:
+            config = task_metadata.get("config")
+            cameras = config.get("cameras", {}) if isinstance(config, dict) else {}
+            task_metadata["rerun"] = {
+                "enabled": False,
+                "mock": True,
+                "cameras": sorted(
+                    name
+                    for name, camera in cameras.items()
+                    if isinstance(camera, dict) and camera.get("enabled", True) and camera.get("serial")
+                ),
+            }
+        else:
+            rerun_environment = build_rerun_runtime(task_metadata)
         info = TaskInfo(
             task_id=task_id,
             task_type=task_type,
@@ -78,7 +138,7 @@ class TaskManager:
             cwd=str(self.settings.project_root),
             resources=sorted(resources),
             mock=self.settings.mock,
-            metadata=metadata or {},
+            metadata=task_metadata,
         )
         assert self.settings.log_dir is not None
         runtime = TaskRuntime(
@@ -112,7 +172,11 @@ class TaskManager:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.STDOUT,
                     start_new_session=True,
-                    env={**os.environ, "A1Z_WEB_EVENTS": "1"},
+                    env={
+                        **os.environ,
+                        "A1Z_WEB_EVENTS": "1",
+                        **rerun_environment,
+                    },
                 )
                 info.pid = runtime.process.pid
                 runtime.monitor = asyncio.create_task(self._monitor_process(runtime))
@@ -174,11 +238,12 @@ class TaskManager:
             }
         elif event_type == "phase":
             runtime.info.phase = data.get("phase", runtime.info.phase)
+            if runtime.record is not None and runtime.info.phase == "saving":
+                runtime.record.begin_saving_from_worker(int(data.get("frames", 0)))
         elif event_type == "health":
             runtime.info.health.update(data)
         elif event_type == "record_frame" and runtime.record is not None:
-            if runtime.record.frames == 0:
-                runtime.record.note_frame()
+            runtime.record.sync_frames_from_worker(int(data.get("frames", 0)))
         elif event_type == "saving_complete" and runtime.record is not None:
             runtime.record.apply_system("saving_complete")
         elif event_type == "calibration_ranges" and runtime.calibration is not None:
@@ -206,8 +271,14 @@ class TaskManager:
                 if runtime.terminator is None:
                     runtime.terminator = asyncio.create_task(self._terminate_faulted_process(runtime))
         await self.events.publish(event_type, data, runtime.info.task_id)
-        self.repository.save(runtime.info)
-        await self.log(runtime.info.task_id, "INFO", "a1z_event", json.dumps(event, ensure_ascii=False))
+        if event_type != "record_frame":
+            self.repository.save(runtime.info)
+            await self.log(
+                runtime.info.task_id,
+                "INFO",
+                "a1z_event",
+                json.dumps(event, ensure_ascii=False),
+            )
 
     async def _terminate_faulted_process(self, runtime: TaskRuntime) -> None:
         """Faults are terminal: stop frame collection and unwind the A1Z finally blocks."""

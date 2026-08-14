@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class TaskType(StrEnum):
+    CAMERA_PREVIEW = "camera_preview"
     CALIBRATION = "calibration"
     PAIRING = "pairing"
     TELEOPERATION = "teleoperation"

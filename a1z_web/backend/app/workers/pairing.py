@@ -11,7 +11,11 @@ from common import emit, request_json
 def main() -> int:
     request = request_json()
     leader = A1ZLeader(
-        A1ZLeaderConfig(id=request["leader_id"], port=request["leader_port"])
+        A1ZLeaderConfig(
+            id=request["leader_id"],
+            port=request["leader_port"],
+            auto_use_calibration=True,
+        )
     )
     follower = A1ZArm(request["can_interface"])
     try:

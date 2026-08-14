@@ -96,6 +96,18 @@ class CameraSelection(BaseModel):
         return value
 
 
+class CameraPreviewRequest(BaseModel):
+    cameras: dict[str, CameraSelection]
+    display_data: bool = True
+    display_compressed_images: bool = True
+
+    @model_validator(mode="after")
+    def enabled_camera_required(self) -> CameraPreviewRequest:
+        if not any(camera.enabled and camera.serial for camera in self.cameras.values()):
+            raise ValueError("at least one enabled camera with a serial is required")
+        return self
+
+
 class MotionBase(BaseModel):
     mode: Literal["single", "dual"] = "dual"
     left_can: str = "can0"

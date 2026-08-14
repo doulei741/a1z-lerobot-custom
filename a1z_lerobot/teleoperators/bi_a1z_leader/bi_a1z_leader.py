@@ -1,6 +1,6 @@
 import math
+from collections.abc import Mapping
 from functools import cached_property
-from typing import Mapping
 
 from a1z.robots.gripper import GRIPPER_CLOSE_RAD, GRIPPER_OPEN_RAD
 from lerobot.teleoperators.teleoperator import Teleoperator
@@ -57,6 +57,7 @@ class BiA1ZLeader(Teleoperator):
             id=leader_id,
             calibration_dir=self.config.calibration_dir,
             port=arm_config.port,
+            auto_use_calibration=arm_config.auto_use_calibration,
             joint_signs=arm_config.joint_signs,
             joint_scales=arm_config.joint_scales,
             joint_offsets_rad=arm_config.joint_offsets_rad,

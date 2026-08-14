@@ -11,6 +11,7 @@ from app.core.database import TaskRepository
 from app.models.tasks import TaskStatus, TaskType
 from app.services.event_bus import EventBus
 from app.services.hardware_manager import HardwareResourceManager
+from app.services.record_state import RecordSession
 from app.services.task_manager import TaskManager
 
 
@@ -82,3 +83,33 @@ async def test_structured_fault_terminates_child_and_releases_hardware(tmp_path:
     assert tasks.get(info.task_id).info.status is TaskStatus.FAULTED
     assert tasks.get(info.task_id).process.returncode is not None
     assert await tasks.hardware.snapshot() == {}
+
+
+@pytest.mark.asyncio
+async def test_record_frame_telemetry_updates_state_without_spamming_logs(tmp_path: Path):
+    tasks = manager(tmp_path)
+    script = (
+        "import json,time; time.sleep(.1); "
+        "print('A1Z_EVENT '+json.dumps({'type':'ready','data':{'phase':'ready'}}),flush=True); "
+        "print('A1Z_EVENT '+json.dumps({'type':'record_frame','data':{'frames':17}}),flush=True); "
+        "time.sleep(30)"
+    )
+    info = await tasks.start(
+        TaskType.RECORDING,
+        {"can0"},
+        argv=[sys.executable, "-u", "-c", script],
+    )
+    runtime = tasks.get(info.task_id)
+    runtime.record = RecordSession(existing_episodes=0, add_episodes=1)
+    runtime.record.apply("start_episode", "start")
+    for _ in range(100):
+        if runtime.record.frames == 17:
+            break
+        await asyncio.sleep(0.01)
+
+    assert runtime.record.frames == 17
+    await tasks.stop(info.task_id)
+    assert not any(
+        entry.source == "a1z_event" and "record_frame" in entry.message
+        for entry in runtime.logs
+    )

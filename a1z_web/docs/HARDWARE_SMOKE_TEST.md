@@ -11,8 +11,8 @@
 7. 不启用相机，以 Safe preset 启动低速 Teleoperation。
 8. 启动后静止 2–5 秒，确认没有姿态跳变或自行运动。
 9. J1–J6 与夹爪逐轴小幅动作，确认轴序、方向、幅值与延迟。
-10. 停止遥操后连接 D435、左右 D405，核对 health、640×480 RGB、30 FPS，并在 Rerun 查看。
-11. 新建临时 Dataset，录制 5–10 秒；测试 Finish、Rerecord、Reset Done、Quick Next。
+10. 连接 D435、左右 D405，核对 health、640×480 RGB、30 FPS；先使用“仅预览相机（不启动机械臂）”，确认页面内嵌 Rerun 同时出现 Top、Left Wrist、Right Wrist 三路画面，然后使用软件停止释放相机。随后启用指定相机和 `display_data` 启动遥操，确认同一 Viewer 能看到所有已启用相机，禁用的相机既不被打开也不出现在 Viewer 中，再测试“在新窗口打开 Rerun”。
+11. 新建临时 Dataset，录制 5–10 秒；确认录制页内嵌画面与 Dataset 相机键一致，并测试 Finish、Rerecord、Reset Done、Quick Next。观察嵌入预览是否令 30 Hz 录制持续降频；若降频，先启用压缩图或减少相机路数，不要提高机器人安全参数。
 12. 检查 `meta/info.json`、parquet/video，确认双臂 state/action 为 14D，label 是 `send_action()` 返回的 actual action。
 13. 在 Inference 页仅读取 checkpoint，确认全部 Compatibility 项通过，此时硬件尚未连接。
 14. 准备初始姿态、物理急停和空工作区，以 Safe Test 执行 5–10 秒 ACT 推理。
