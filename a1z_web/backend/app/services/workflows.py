@@ -215,8 +215,12 @@ class HealthService:
             state = "healthy" if "UP" in flags and "LOWER_UP" in flags else str(link.get("operstate", "unknown")).lower()
             data = info.get("info_data", {})
             item = {"name": link["ifname"], "state": state}
-            if "bitrate" in data:
-                item["bitrate"] = int(data["bitrate"])
+            bitrate = data.get("bitrate")
+            bittiming = data.get("bittiming")
+            if bitrate is None and isinstance(bittiming, dict):
+                bitrate = bittiming.get("bitrate")
+            if bitrate is not None:
+                item["bitrate"] = int(bitrate)
             devices.append(item)
         return devices
 

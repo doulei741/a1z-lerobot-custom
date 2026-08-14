@@ -85,10 +85,16 @@ async def system_health(request: Request) -> dict[str, Any]:
             "cameras": "healthy" if inventory["cameras"] else "offline",
         }
     states = set(resources.values())
+    if "fault" in states:
+        status = "fault"
+    elif states - {"healthy"}:
+        status = "degraded"
+    else:
+        status = "healthy"
     return {
         "mode": "mock" if svc.settings.mock else "real",
         "hardware_motion_enabled": svc.settings.allow_hardware,
-        "status": "fault" if "fault" in states else "degraded" if "offline" in states else "healthy",
+        "status": status,
         "resources": resources,
         "owners": owners,
     }

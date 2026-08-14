@@ -187,3 +187,19 @@ def test_can_discovery_treats_up_can_with_unknown_operstate_as_healthy() -> None
     assert HealthService._parse_can_links(links) == [
         {"name": "can0", "state": "healthy", "bitrate": 1_000_000}
     ]
+
+
+def test_can_discovery_reads_bitrate_from_iproute2_bittiming_object() -> None:
+    links = [{
+        "ifname": "can0",
+        "flags": ["NOARP", "UP", "LOWER_UP", "ECHO"],
+        "operstate": "UP",
+        "linkinfo": {
+            "info_kind": "can",
+            "info_data": {"state": "ERROR-ACTIVE", "bittiming": {"bitrate": 1_000_000}},
+        },
+    }]
+
+    assert HealthService._parse_can_links(links) == [
+        {"name": "can0", "state": "healthy", "bitrate": 1_000_000}
+    ]
