@@ -33,7 +33,7 @@ export function Inference() {
   const [cameraHeight, setCameraHeight] = useState(480)
   const setActive = usePlatformStore((state) => state.setActiveTask)
   const taskId = usePlatformStore((state) => state.activeTaskId)
-  const task = useQuery({ queryKey: ['task', taskId], queryFn: () => api.task(taskId!), enabled: Boolean(taskId), refetchInterval: 500 })
+  const task = useQuery({ queryKey: ['task', taskId], queryFn: () => api.task(taskId!), enabled: Boolean(taskId) })
   const devices = useQuery({ queryKey: ['devices'], queryFn: api.devices })
   const inspect = useMutation({ mutationFn: () => api.inspectPolicy(policyPath, mode), onSuccess: setReport })
   const camera = (serial: string) => ({ serial, width: cameraWidth, height: cameraHeight, fps, use_depth: false })

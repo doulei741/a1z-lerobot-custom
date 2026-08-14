@@ -5,11 +5,13 @@ import type { RealtimeEvent } from '../types'
 interface PlatformState {
   activeTaskId: string | null
   activeTaskType: string | null
+  activeTaskObserved: boolean
   taskPhase: string | null
   logDrawerOpen: boolean
   websocketState: 'connecting' | 'connected' | 'disconnected'
   lastSeq: number
   setActiveTask: (id: string | null, type?: string | null) => void
+  adoptActiveTask: () => void
   setPhase: (phase: string | null) => void
   setLogDrawer: (open: boolean) => void
   setWebsocketState: (state: PlatformState['websocketState']) => void
@@ -19,11 +21,13 @@ interface PlatformState {
 export const usePlatformStore = create<PlatformState>()(persist((set) => ({
   activeTaskId: null,
   activeTaskType: null,
+  activeTaskObserved: false,
   taskPhase: null,
   logDrawerOpen: false,
   websocketState: 'disconnected',
   lastSeq: 0,
-  setActiveTask: (activeTaskId, activeTaskType = null) => set({ activeTaskId, activeTaskType }),
+  setActiveTask: (activeTaskId, activeTaskType = null) => set({ activeTaskId, activeTaskType, activeTaskObserved: activeTaskId !== null }),
+  adoptActiveTask: () => set({ activeTaskObserved: true }),
   setPhase: (taskPhase) => set({ taskPhase }),
   setLogDrawer: (logDrawerOpen) => set({ logDrawerOpen }),
   setWebsocketState: (websocketState) => set({ websocketState }),

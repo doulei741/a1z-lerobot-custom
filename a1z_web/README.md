@@ -170,6 +170,8 @@ Resume 完全图形化：打开 Resume 后先执行 Compatibility，页面读取
 
 错误统一为 `{error: {code, message, details, recoverable}}`。参数 Schema 由后端 Pydantic 模型生成，并附单位、说明、危险级别、readonly/restart metadata。
 
+后端重启后，如果浏览器保留的 `last_seq` 大于新进程当前序号，EventBus 会自动按新会话重新同步。补发队列容量与 ring buffer 一致，避免大量历史事件造成连接刚建立就溢出并反复重连。高频 `log` 事件只更新日志流，不再触发任务元数据 HTTP 查询；结构化 task/health/fault/phase 事件负责实时刷新状态，运行期间另有每 2 秒一次的 HTTP 兜底。浏览器恢复出的旧任务如果已经处于终态，会被归档，不会在首次打开页面时冒充当前故障任务。
+
 ## Testing
 
 ```bash

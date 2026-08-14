@@ -19,23 +19,44 @@ const navigation = [
   { to: '/inference', label: '模型推理', icon: CircleGauge },
 ]
 
+const ACTIVE_TASK_STATUSES = new Set(['created', 'starting', 'ready', 'running', 'stopping'])
+
 export function AppShell({ children }: PropsWithChildren) {
   const activeTaskId = usePlatformStore((state) => state.activeTaskId)
+  const activeTaskObserved = usePlatformStore((state) => state.activeTaskObserved)
   const setActiveTask = usePlatformStore((state) => state.setActiveTask)
+  const adoptActiveTask = usePlatformStore((state) => state.adoptActiveTask)
   const setLogs = usePlatformStore((state) => state.setLogDrawer)
   const ws = usePlatformStore((state) => state.websocketState)
   const [dismissedFault, setDismissedFault] = useState<string | null>(null)
   const [deviceCenterOpen, setDeviceCenterOpen] = useState(false)
   const health = useQuery({ queryKey: ['health'], queryFn: api.health, refetchInterval: 5000 })
-  const task = useQuery({ queryKey: ['task', activeTaskId], queryFn: () => api.task(activeTaskId!), enabled: Boolean(activeTaskId), refetchInterval: 1000 })
+  const task = useQuery({
+    queryKey: ['task', activeTaskId],
+    queryFn: () => api.task(activeTaskId!),
+    enabled: Boolean(activeTaskId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      return !status || ACTIVE_TASK_STATUSES.has(status) ? 2000 : false
+    },
+  })
   const stop = useMutation({ mutationFn: () => api.stop(activeTaskId!), onSuccess: (result) => { if (['stopped', 'completed', 'failed', 'faulted'].includes(result.status)) setActiveTask(null) } })
   useEffect(() => {
-    if (task.data && ['completed', 'stopped'].includes(task.data.status)) {
+    if (!task.data || task.data.task_id !== activeTaskId) return
+    if (ACTIVE_TASK_STATUSES.has(task.data.status)) {
+      if (!activeTaskObserved) adoptActiveTask()
+      return
+    }
+    if (['failed', 'faulted'].includes(task.data.status) && !activeTaskObserved) {
+      setActiveTask(null)
+      return
+    }
+    if (['completed', 'stopped'].includes(task.data.status)) {
       const timer = window.setTimeout(() => setActiveTask(null), 1200)
       return () => window.clearTimeout(timer)
     }
-  }, [setActiveTask, task.data])
-  const faultReport: PreflightReport | null = task.data && ['failed', 'faulted'].includes(task.data.status) && dismissedFault !== task.data.task_id ? {
+  }, [activeTaskId, activeTaskObserved, adoptActiveTask, setActiveTask, task.data])
+  const faultReport: PreflightReport | null = activeTaskObserved && task.data && ['failed', 'faulted'].includes(task.data.status) && dismissedFault !== task.data.task_id ? {
     ready: false,
     simulation: false,
     workflow: task.data.task_type === 'pairing' ? 'pairing' : task.data.task_type,
@@ -58,7 +79,7 @@ export function AppShell({ children }: PropsWithChildren) {
       <header className="topbar">
         <div className="system-state"><StatusDot state={health.data?.status ?? 'unknown'} label="系统" /><StatusDot state={ws === 'connected' ? 'healthy' : ws === 'connecting' ? 'degraded' : 'unknown'} label="实时通道" />{health.data?.mode === 'mock' && <span className="mock-badge">MOCK</span>}</div>
         <div className="active-task">{task.data ? <><span>{task.data.task_type}</span><strong>{task.data.status.toUpperCase()}</strong><code>{task.data.task_id}</code></> : <span>无活动任务</span>}</div>
-        <div className="topbar-actions">{health.data && <RuntimeModeControl mode={health.data.mode} activeTask={Boolean(activeTaskId)} />}<Button variant="secondary" onClick={() => setDeviceCenterOpen(true)}><Usb size={16} />设备中心</Button><Button variant="danger" disabled={!activeTaskId || stop.isPending} onClick={() => stop.mutate()}><OctagonX size={17} />软件停止</Button></div>
+        <div className="topbar-actions">{health.data && <RuntimeModeControl mode={health.data.mode} activeTask={Boolean(activeTaskId && (!task.data || ACTIVE_TASK_STATUSES.has(task.data.status)))} />}<Button variant="secondary" onClick={() => setDeviceCenterOpen(true)}><Usb size={16} />设备中心</Button><Button variant="danger" disabled={!activeTaskId || Boolean(task.data && !ACTIVE_TASK_STATUSES.has(task.data.status)) || stop.isPending} onClick={() => stop.mutate()}><OctagonX size={17} />软件停止</Button></div>
       </header>
       {health.data?.mode === 'mock' && <div className="mode-banner"><AlertTriangle size={16} /><strong>Mock 仿真模式</strong><span>页面不会连接或移动真实机械臂；启动动作前会再次提示。</span></div>}
       {health.data?.mode === 'real' && !health.data.hardware_motion_enabled && <div className="mode-banner"><AlertTriangle size={16} /><strong>实机动作已禁用</strong><span>设置 A1Z_WEB_ALLOW_HARDWARE=1 并重启后端后才能启动机器人任务。</span></div>}

@@ -25,8 +25,16 @@ class EventBus:
             return event
 
     async def subscribe(self, after: int = 0) -> asyncio.Queue[EventEnvelope]:
-        queue: asyncio.Queue[EventEnvelope] = asyncio.Queue(maxsize=1000)
+        # The replay buffer can contain up to ``max_events`` entries.  A smaller
+        # subscriber queue would raise QueueFull during subscribe, close the
+        # socket before sending anything, and trap clients in a reconnect loop.
+        queue: asyncio.Queue[EventEnvelope] = asyncio.Queue(maxsize=self._events.maxlen or 5000)
         async with self._lock:
+            # A browser can retain a sequence from a backend process that has
+            # since restarted.  The new process starts again at zero, so a
+            # future cursor must be treated as a fresh subscription.
+            if after > self._seq:
+                after = 0
             for event in self._events:
                 if event.seq > after:
                     queue.put_nowait(event)

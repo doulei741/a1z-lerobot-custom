@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { App } from '../app/App'
@@ -63,6 +63,40 @@ test('active task id survives route navigation', async () => {
   expect(await screen.findByText('record-test123')).toBeInTheDocument()
   await user.click(screen.getByRole('link', { name: /机械臂校准/ }))
   expect(screen.getByText('record-test123')).toBeInTheDocument()
+})
+
+test('a terminal task restored from a previous browser session is archived without a fault popup', async () => {
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/system/health')) return jsonResponse({ mode: 'real', hardware_motion_enabled: true, status: 'healthy', resources: {} })
+    if (/\/tasks\/stale-teleop$/.test(url)) return jsonResponse({ task_id: 'stale-teleop', task_type: 'teleoperation', status: 'faulted', phase: 'fault', health: {}, mock: false, message: 'Backend restarted while this task was active; verify hardware manually' })
+    if (url.includes('/calibration/profiles')) return jsonResponse({ items: [] })
+    if (url.includes('/devices')) return jsonResponse({ mock: false, can: [], leaders: [], cameras: [] })
+    return jsonResponse([])
+  }))
+  usePlatformStore.setState({ activeTaskId: 'stale-teleop', activeTaskType: 'teleoperation' })
+
+  render(<App initialPath="/teleoperation" disableRealtime />)
+
+  await waitFor(() => expect(usePlatformStore.getState().activeTaskId).toBeNull())
+  expect(screen.queryByRole('heading', { name: '设备检查未通过' })).not.toBeInTheDocument()
+})
+
+test('a task started in the current page still reports an immediate failure', async () => {
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/system/health')) return jsonResponse({ mode: 'real', hardware_motion_enabled: true, status: 'healthy', resources: {} })
+    if (/\/tasks\/current-teleop$/.test(url)) return jsonResponse({ task_id: 'current-teleop', task_type: 'teleoperation', status: 'failed', phase: 'failed', health: {}, mock: false, message: 'camera unavailable' })
+    if (url.includes('/calibration/profiles')) return jsonResponse({ items: [] })
+    if (url.includes('/devices')) return jsonResponse({ mock: false, can: [], leaders: [], cameras: [] })
+    return jsonResponse([])
+  }))
+  render(<App initialPath="/teleoperation" disableRealtime />)
+
+  act(() => usePlatformStore.getState().setActiveTask('current-teleop', 'teleoperation'))
+
+  expect(await screen.findByRole('heading', { name: '设备检查未通过' })).toBeInTheDocument()
+  expect(screen.getByText('camera unavailable')).toBeInTheDocument()
 })
 
 test('teleoperation preflight blocks task start and shows recovery steps', async () => {

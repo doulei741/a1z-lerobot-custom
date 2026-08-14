@@ -22,7 +22,7 @@ interface PairingResult {
 export function Calibration() {
   const setActive = usePlatformStore((state) => state.setActiveTask)
   const activeId = usePlatformStore((state) => state.activeTaskId)
-  const activeTask = useQuery({ queryKey: ['task', activeId], queryFn: () => api.task(activeId!), enabled: Boolean(activeId), refetchInterval: 500 })
+  const activeTask = useQuery({ queryKey: ['task', activeId], queryFn: () => api.task(activeId!), enabled: Boolean(activeId) })
   const [side, setSide] = useState<'left' | 'right'>('left')
   const [port, setPort] = useState('/dev/ttyACM0')
   const [leaderId, setLeaderId] = useState('a1z_left_leader')

@@ -4,6 +4,12 @@ import { websocketUrl } from '../services/api'
 import { usePlatformStore } from '../stores/platform'
 import type { RealtimeEvent } from '../types'
 
+const TASK_STATE_EVENTS = new Set(['task', 'ready', 'health', 'fault', 'record_phase', 'calibration'])
+
+export function shouldInvalidateTask(eventType: string) {
+  return TASK_STATE_EVENTS.has(eventType)
+}
+
 export function useRealtime(disabled = false) {
   const queryClient = useQueryClient()
   const acceptEvent = usePlatformStore((state) => state.acceptEvent)
@@ -21,7 +27,7 @@ export function useRealtime(disabled = false) {
       socket.onmessage = (message) => {
         const event = JSON.parse(message.data as string) as RealtimeEvent
         acceptEvent(event)
-        if (event.task_id) void queryClient.invalidateQueries({ queryKey: ['task', event.task_id] })
+        if (event.task_id && shouldInvalidateTask(event.type)) void queryClient.invalidateQueries({ queryKey: ['task', event.task_id] })
         if (event.type === 'log' && event.task_id) void queryClient.invalidateQueries({ queryKey: ['logs', event.task_id] })
       }
       socket.onclose = () => {
@@ -29,7 +35,10 @@ export function useRealtime(disabled = false) {
         if (!stopped) timer = window.setTimeout(connect, 1000)
       }
     }
-    connect()
+    // Defer the first connection by one task. React StrictMode intentionally
+    // mounts, cleans up, and mounts effects again in development; deferring
+    // lets the probe cleanup cancel its socket before it reaches the backend.
+    timer = window.setTimeout(connect, 0)
     return () => {
       stopped = true
       if (timer) window.clearTimeout(timer)
