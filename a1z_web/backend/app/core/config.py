@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     graceful_stop_timeout_s: float = 8.0
     term_timeout_s: float = 3.0
     log_ring_size: int = 3000
+
+    @field_validator("project_root", mode="before")
+    @classmethod
+    def replace_example_project_root(cls, value: object) -> object:
+        if value is None or str(value).strip() in {"", "/path/to/a1z-lerobot"}:
+            return discover_project_root()
+        return value
 
     def model_post_init(self, __context: object) -> None:
         base = self.data_dir or self.project_root / "a1z_web" / ".runtime"
