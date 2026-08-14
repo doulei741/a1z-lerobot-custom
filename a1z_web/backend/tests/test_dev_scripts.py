@@ -21,3 +21,17 @@ def test_safe_dev_restart_scripts_are_available() -> None:
     restart_source = restart_script.read_text()
     assert '"${SCRIPT_DIR}/stop-dev.sh"' in restart_source
     assert 'exec "${SCRIPT_DIR}/dev.sh"' in restart_source
+
+
+def test_dev_scripts_drop_foreign_conda_library_path_and_quiet_access_logs() -> None:
+    scripts = [
+        WEB_ROOT / "scripts" / name
+        for name in ("dev.sh", "dev-backend.sh", "dev-frontend.sh", "restart-dev.sh", "stop-dev.sh")
+    ]
+
+    for script in scripts:
+        assert script.read_text().splitlines()[0] == "#!/usr/bin/env -S -u LD_LIBRARY_PATH bash"
+
+    backend_source = (WEB_ROOT / "scripts" / "dev-backend.sh").read_text()
+    assert "--no-access-log" in backend_source
+    assert "--log-level warning" in backend_source

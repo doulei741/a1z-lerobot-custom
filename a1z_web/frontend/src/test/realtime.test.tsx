@@ -42,3 +42,27 @@ test('React StrictMode creates only one live WebSocket connection', async () => 
 
   await waitFor(() => expect(sockets).toHaveLength(1))
 })
+
+test('multiple app roots in one browser document share one live WebSocket', async () => {
+  const sockets: FakeWebSocket[] = []
+  class FakeWebSocket {
+    onopen: (() => void) | null = null
+    onmessage: ((event: MessageEvent) => void) | null = null
+    onclose: (() => void) | null = null
+    constructor() { sockets.push(this) }
+    close() { this.onclose?.() }
+  }
+  vi.stubGlobal('WebSocket', FakeWebSocket)
+  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{}', {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  }))))
+
+  const first = render(<App initialPath="/calibration" />)
+  const second = render(<App initialPath="/calibration" />)
+
+  await waitFor(() => expect(sockets).toHaveLength(1))
+  first.unmount()
+  expect(sockets).toHaveLength(1)
+  second.unmount()
+})

@@ -5,6 +5,68 @@ import { usePlatformStore } from '../stores/platform'
 import type { RealtimeEvent } from '../types'
 
 const TASK_STATE_EVENTS = new Set(['task', 'ready', 'health', 'fault', 'record_phase', 'calibration'])
+type EventSubscriber = (event: RealtimeEvent) => void
+
+const subscribers = new Set<EventSubscriber>()
+let sharedSocket: WebSocket | null = null
+let connectTimer: number | undefined
+let reconnectTimer: number | undefined
+
+function clearTimer(timer: number | undefined) {
+  if (timer !== undefined) window.clearTimeout(timer)
+}
+
+function connectSharedSocket() {
+  if (subscribers.size === 0 || sharedSocket || connectTimer !== undefined) return
+  usePlatformStore.getState().setWebsocketState('connecting')
+  connectTimer = window.setTimeout(() => {
+    connectTimer = undefined
+    if (subscribers.size === 0 || sharedSocket) return
+
+    const socket = new WebSocket(websocketUrl(usePlatformStore.getState().lastSeq))
+    sharedSocket = socket
+    socket.onopen = () => usePlatformStore.getState().setWebsocketState('connected')
+    socket.onmessage = (message) => {
+      const event = JSON.parse(message.data as string) as RealtimeEvent
+      usePlatformStore.getState().acceptEvent(event)
+      subscribers.forEach((subscriber) => subscriber(event))
+    }
+    socket.onclose = () => {
+      if (sharedSocket !== socket) return
+      sharedSocket = null
+      usePlatformStore.getState().setWebsocketState('disconnected')
+      if (subscribers.size > 0) {
+        reconnectTimer = window.setTimeout(() => {
+          reconnectTimer = undefined
+          connectSharedSocket()
+        }, 1000)
+      }
+    }
+  }, 0)
+}
+
+function subscribeToRealtime(subscriber: EventSubscriber) {
+  subscribers.add(subscriber)
+  clearTimer(reconnectTimer)
+  reconnectTimer = undefined
+  connectSharedSocket()
+
+  return () => {
+    subscribers.delete(subscriber)
+    if (subscribers.size > 0) return
+    clearTimer(connectTimer)
+    clearTimer(reconnectTimer)
+    connectTimer = undefined
+    reconnectTimer = undefined
+    const socket = sharedSocket
+    sharedSocket = null
+    if (socket) {
+      socket.onclose = null
+      socket.close()
+    }
+    usePlatformStore.getState().setWebsocketState('disconnected')
+  }
+}
 
 export function shouldInvalidateTask(eventType: string) {
   return TASK_STATE_EVENTS.has(eventType)
@@ -12,37 +74,12 @@ export function shouldInvalidateTask(eventType: string) {
 
 export function useRealtime(disabled = false) {
   const queryClient = useQueryClient()
-  const acceptEvent = usePlatformStore((state) => state.acceptEvent)
-  const setConnection = usePlatformStore((state) => state.setWebsocketState)
 
   useEffect(() => {
     if (disabled) return
-    let socket: WebSocket | null = null
-    let timer: number | undefined
-    let stopped = false
-    const connect = () => {
-      setConnection('connecting')
-      socket = new WebSocket(websocketUrl(usePlatformStore.getState().lastSeq))
-      socket.onopen = () => setConnection('connected')
-      socket.onmessage = (message) => {
-        const event = JSON.parse(message.data as string) as RealtimeEvent
-        acceptEvent(event)
-        if (event.task_id && shouldInvalidateTask(event.type)) void queryClient.invalidateQueries({ queryKey: ['task', event.task_id] })
-        if (event.type === 'log' && event.task_id) void queryClient.invalidateQueries({ queryKey: ['logs', event.task_id] })
-      }
-      socket.onclose = () => {
-        setConnection('disconnected')
-        if (!stopped) timer = window.setTimeout(connect, 1000)
-      }
-    }
-    // Defer the first connection by one task. React StrictMode intentionally
-    // mounts, cleans up, and mounts effects again in development; deferring
-    // lets the probe cleanup cancel its socket before it reaches the backend.
-    timer = window.setTimeout(connect, 0)
-    return () => {
-      stopped = true
-      if (timer) window.clearTimeout(timer)
-      socket?.close()
-    }
-  }, [acceptEvent, disabled, queryClient, setConnection])
+    return subscribeToRealtime((event) => {
+      if (event.task_id && shouldInvalidateTask(event.type)) void queryClient.invalidateQueries({ queryKey: ['task', event.task_id] })
+      if (event.type === 'log' && event.task_id) void queryClient.invalidateQueries({ queryKey: ['logs', event.task_id] })
+    })
+  }, [disabled, queryClient])
 }
