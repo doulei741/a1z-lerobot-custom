@@ -62,6 +62,8 @@ export A1Z_WEB_ALLOW_HARDWARE=0
 ./scripts/dev.sh
 ```
 
+`dev.sh` 会监督前后端两个进程。若 8000 端口已被旧后端占用，脚本会直接退出并提示端口冲突，不会继续留下一个所有请求都 pending 的孤立前端；前后端任一进程异常退出时，另一侧也会被停止。前端固定使用 `${A1Z_WEB_FRONTEND_PORT:-5173}` 且启用 strict port，避免 Vite 静默改到另一个端口。
+
 也可分别运行 `./scripts/dev-backend.sh` 与 `./scripts/dev-frontend.sh`。前端为 `http://127.0.0.1:5173`，Vite 将 `/api` 和 `/ws` 代理到后端。
 
 生产构建：
