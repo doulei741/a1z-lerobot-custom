@@ -59,6 +59,16 @@ def require_safety(confirmed: bool) -> None:
         )
 
 
+async def inspect_preflight(workflow: str, payload: Any, request: Request) -> dict[str, Any]:
+    return await services(request).preflight.inspect(workflow, payload)
+
+
+async def require_preflight(workflow: str, payload: Any, request: Request) -> dict[str, Any]:
+    report = await inspect_preflight(workflow, payload, request)
+    services(request).preflight.require_ready(report)
+    return report
+
+
 @router.get("/system/health")
 async def system_health(request: Request) -> dict[str, Any]:
     svc = services(request)
@@ -152,8 +162,14 @@ async def stop_task(task_id: str, request: Request, payload: StopRequest | None 
 async def start_teleop(payload: TeleoperationRequest, request: Request):
     require_safety(payload.safety_confirmed)
     svc = services(request)
+    await require_preflight("teleoperation", payload, request)
     argv = svc.commands.teleoperation(payload)
     return await svc.tasks.start(TaskType.TELEOPERATION, motion_resources(payload), argv=argv, metadata={"config": payload.model_dump(mode="json")})
+
+
+@router.post("/teleop/preflight")
+async def teleop_preflight(payload: TeleoperationRequest, request: Request):
+    return await inspect_preflight("teleoperation", payload, request)
 
 
 @router.post("/teleop/{task_id}/stop")
@@ -187,6 +203,7 @@ async def calibration_status(
 @router.post("/calibration/start", status_code=status.HTTP_201_CREATED)
 async def calibration_start(payload: CalibrationStartRequest, request: Request):
     svc = services(request)
+    await require_preflight("calibration", payload, request)
     argv = svc.commands.calibration(payload)
     info = await svc.tasks.start(
         TaskType.CALIBRATION,
@@ -196,6 +213,11 @@ async def calibration_start(payload: CalibrationStartRequest, request: Request):
     )
     svc.tasks.get(info.task_id).calibration = CalibrationSession()
     return info
+
+
+@router.post("/calibration/preflight")
+async def calibration_preflight(payload: CalibrationStartRequest, request: Request):
+    return await inspect_preflight("calibration", payload, request)
 
 
 async def calibration_command(task_id: str, command: str, action: DomainAction, request: Request):
@@ -253,6 +275,7 @@ async def pairing_calculate(payload: PairingCalculateRequest, request: Request):
 async def pairing_read(payload: PairingReadRequest, request: Request):
     require_safety(payload.safety_confirmed)
     svc = services(request)
+    await require_preflight("pairing", payload, request)
     info = await svc.tasks.start(
         TaskType.PAIRING,
         {f"leader_{payload.side}", payload.can_interface, f"a1z_{payload.side}"},
@@ -273,6 +296,11 @@ async def pairing_read(payload: PairingReadRequest, request: Request):
         svc.tasks.get(info.task_id).info.metadata["pairing_result"] = result
         await svc.tasks.complete_mock(info.task_id)
     return info
+
+
+@router.post("/pairing/preflight")
+async def pairing_preflight(payload: PairingReadRequest, request: Request):
+    return await inspect_preflight("pairing", payload, request)
 
 
 @router.post("/pairing/verify")
@@ -309,12 +337,18 @@ async def start_record(payload: RecordingRequest, request: Request):
             details=report,
             status_code=409,
         )
+    await require_preflight("recording", payload, request)
     argv = svc.commands.recording(payload)
     info = await svc.tasks.start(TaskType.RECORDING, motion_resources(payload), argv=argv, metadata={"config": payload.model_dump(mode="json")})
     runtime = svc.tasks.get(info.task_id)
     existing = svc.dataset_existing_episodes(payload)
     runtime.record = RecordSession(existing_episodes=existing, add_episodes=payload.dataset.num_episodes)
     return info
+
+
+@router.post("/record/preflight")
+async def record_preflight(payload: RecordingRequest, request: Request):
+    return await inspect_preflight("recording", payload, request)
 
 
 @router.post("/record/compatibility")
@@ -422,8 +456,14 @@ async def start_inference(payload: InferenceRequest, request: Request):
         raise ApiError("compatibility_required", "Inspect and validate policy compatibility before starting", status_code=409)
     svc = services(request)
     svc.policy.validate_token(payload.compatibility_token, payload.policy_path, payload.mode)
+    await require_preflight("inference", payload, request)
     argv = svc.commands.inference(payload)
     return await svc.tasks.start(TaskType.INFERENCE, motion_resources(payload), argv=argv, metadata={"config": payload.model_dump(mode="json")})
+
+
+@router.post("/inference/preflight")
+async def inference_preflight(payload: InferenceRequest, request: Request):
+    return await inspect_preflight("inference", payload, request)
 
 
 @router.post("/inference/{task_id}/stop")

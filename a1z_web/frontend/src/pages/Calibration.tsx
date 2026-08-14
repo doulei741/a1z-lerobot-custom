@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { api } from '../services/api'
 import { usePlatformStore } from '../stores/platform'
 import { Button, ErrorNotice, Field, GlassCard, PageTitle, StatusDot } from '../components/ui'
+import { PreflightDialog } from '../components/PreflightDialog'
+import { usePreflightStart } from '../hooks/usePreflightStart'
 
 const motors = ['arm_0', 'arm_1', 'arm_2', 'arm_3', 'arm_4', 'arm_5', 'gripper']
 const defaultSigns = [-1, -1, 1, 1, 1, -1]
@@ -31,7 +33,8 @@ export function Calibration() {
   const [savedOffsets, setSavedOffsets] = useState<number[] | null>(null)
   const calibrationStatus = useQuery({ queryKey: ['calibration-status', leaderId], queryFn: () => api.calibrationStatus(leaderId) })
   const profiles = useQuery({ queryKey: ['pairing-profiles'], queryFn: api.pairingProfiles })
-  const start = useMutation({ mutationFn: () => api.startCalibration({ side, port, leader_id: leaderId }), onSuccess: (task) => { setActive(task.task_id, task.task_type); setPhase('waiting_middle') } })
+  const calibrationRequest = () => ({ side, port, leader_id: leaderId })
+  const guardedCalibration = usePreflightStart(api.preflightCalibration, api.startCalibration, (task) => { setActive(task.task_id, task.task_type); setPhase('waiting_middle') })
   const action = useMutation({ mutationFn: async (name: string) => {
     if (!activeId) throw new Error('请先启动校准')
     const result = await api.calibrationAction(activeId, name, crypto.randomUUID())
@@ -39,13 +42,11 @@ export function Calibration() {
     if (result.ranges && typeof result.ranges === 'object') setRanges(result.ranges as Record<string, { min: number; max: number }>)
     return result
   } })
-  const pairRead = useMutation({
-    mutationFn: () => api.pairingRead({ side, leader_port: port, leader_id: leaderId, can_interface: side === 'left' ? 'can0' : 'can1', signs: defaultSigns, scales: defaultScales, safety_confirmed: pairConfirmed }),
-    onSuccess: (task) => {
+  const pairingRequest = () => ({ side, leader_port: port, leader_id: leaderId, can_interface: side === 'left' ? 'can0' : 'can1', signs: defaultSigns, scales: defaultScales, safety_confirmed: pairConfirmed })
+  const guardedPairing = usePreflightStart(api.preflightPairing, api.pairingRead, (task) => {
       setActive(task.task_id, task.task_type)
       const value = task.metadata?.pairing_result
       if (value && typeof value === 'object') setPairing(value as unknown as PairingResult)
-    },
   })
   const savePairing = useMutation({
     mutationFn: () => {
@@ -82,9 +83,9 @@ export function Calibration() {
         <Field label="Leader ID" hint="左右必须使用不同 calibration id"><input value={leaderId} onChange={(event) => setLeaderId(event.target.value)} /></Field>
         <div className="notice"><b>{calibrationStatus.data?.exists ? '已有校准可直接使用' : '未发现校准文件'}</b>{calibrationStatus.data?.path ?? '正在检查…'}</div>
         <div className="instruction"><strong>{phase === 'waiting_middle' ? '将所有关节移到机械行程中点' : phase === 'recording_range' ? '逐一走完整 J1–J6 与夹爪范围' : '流程由现有 A1ZLeader 校准逻辑执行'}</strong><p>Follower 零位维护不在本页面提供，请使用高级维护工具与终端。</p></div>
-        <ErrorNotice error={(start.error ?? action.error) as Error | null} />
+        <ErrorNotice error={(guardedCalibration.error ?? action.error) as Error | null} />
         <div className="actions">
-          {phase === 'idle' && <Button onClick={() => start.mutate()} disabled={start.isPending || Boolean(activeId)}>{calibrationStatus.data?.exists ? '重新校准' : '开始校准'}</Button>}
+          {phase === 'idle' && <Button onClick={() => guardedCalibration.run(calibrationRequest())} disabled={guardedCalibration.isPending || Boolean(activeId)}>{calibrationStatus.data?.exists ? '重新校准' : '开始校准'}</Button>}
           {phase === 'waiting_middle' && <Button onClick={() => action.mutate('middle')}>确认中位并写入 Half-turn Homing</Button>}
           {phase === 'waiting_range' && <Button onClick={() => action.mutate('record-range')}>开始记录全行程</Button>}
           {phase === 'recording_range' && <Button onClick={() => action.mutate('stop-range')}>停止范围记录</Button>}
@@ -100,8 +101,10 @@ export function Calibration() {
     </div>
     <GlassCard className="pairing-panel">
       <div className="card-heading"><div><span className="eyebrow">PAIRING PROFILE</span><h2>{side === 'left' ? '左臂' : '右臂'} Leader / Follower 配对</h2></div><StatusDot state={savePairing.isSuccess ? 'healthy' : pairing ? 'degraded' : 'unknown'} label={savePairing.isSuccess ? 'Saved' : pairing ? 'Review' : 'Not read'} /></div>
-      <div className="pairing-grid"><div><Field label="Leader"><input value={`${leaderId} · ${port}`} readOnly /></Field><Field label="Follower"><input value={`${side === 'left' ? 'can0' : 'can1'} · A1Z ${side}`} readOnly /></Field><label className="safety-check"><input type="checkbox" checked={pairConfirmed} onChange={(event) => setPairConfirmed(event.target.checked)} /><ShieldCheck /><span><b>同一安全姿态已确认</b>两臂周围无障碍物，物理急停可用。读取会短暂连接 Follower。</span></label><Button disabled={!pairConfirmed || pairRead.isPending || Boolean(activeId)} onClick={() => pairRead.mutate()}><Link2 size={16} />读取 6D 并计算 Offset</Button><ErrorNotice error={(pairRead.error ?? savePairing.error) as Error | null} /></div><div className="range-table"><div className="range-head"><span>Joint</span><span>Leader</span><span>Follower</span><span>Offset</span></div>{Array.from({ length: 6 }, (_, index) => <div key={index}><strong>J{index + 1}</strong><span>{pairing?.leader_rad[index]?.toFixed(3) ?? '—'}</span><span>{pairing?.follower_rad[index]?.toFixed(3) ?? '—'}</span><span>{pairing?.offsets_rad[index]?.toFixed(3) ?? '—'}</span></div>)}</div></div>
+      <div className="pairing-grid"><div><Field label="Leader"><input value={`${leaderId} · ${port}`} readOnly /></Field><Field label="Follower"><input value={`${side === 'left' ? 'can0' : 'can1'} · A1Z ${side}`} readOnly /></Field><label className="safety-check"><input type="checkbox" checked={pairConfirmed} onChange={(event) => setPairConfirmed(event.target.checked)} /><ShieldCheck /><span><b>同一安全姿态已确认</b>两臂周围无障碍物，物理急停可用。读取会短暂连接 Follower。</span></label><Button disabled={!pairConfirmed || guardedPairing.isPending || Boolean(activeId)} onClick={() => guardedPairing.run(pairingRequest())}><Link2 size={16} />读取 6D 并计算 Offset</Button><ErrorNotice error={(guardedPairing.error ?? savePairing.error) as Error | null} /></div><div className="range-table"><div className="range-head"><span>Joint</span><span>Leader</span><span>Follower</span><span>Offset</span></div>{Array.from({ length: 6 }, (_, index) => <div key={index}><strong>J{index + 1}</strong><span>{pairing?.leader_rad[index]?.toFixed(3) ?? '—'}</span><span>{pairing?.follower_rad[index]?.toFixed(3) ?? '—'}</span><span>{pairing?.offsets_rad[index]?.toFixed(3) ?? '—'}</span></div>)}</div></div>
       <div className="actions"><Button variant="secondary" disabled={!pairing || verifyPairing.isPending} onClick={() => verifyPairing.mutate()}><Check size={16} />用已保存 Offset 验证 0.05 rad</Button><Button variant="secondary" disabled={!pairing || savePairing.isPending || verifyPairing.data?.verified === false} onClick={() => savePairing.mutate()}><Save size={16} />保存独立 Pairing Profile</Button></div>{verifyPairing.data && <div className="notice"><b>{verifyPairing.data.verified ? 'VERIFY PASSED' : 'VERIFY FAILED'}</b>各轴误差：{verifyPairing.data.errors_rad.map((value) => value.toFixed(3)).join(' · ')} rad。保存后可将两臂移到另一相同姿态、重新读取并再次验证。</div>}
     </GlassCard>
+    <PreflightDialog report={guardedCalibration.report} onClose={guardedCalibration.closeReport} onContinueSimulation={guardedCalibration.continueSimulation} />
+    <PreflightDialog report={guardedPairing.report} onClose={guardedPairing.closeReport} onContinueSimulation={guardedPairing.continueSimulation} />
   </div>
 }

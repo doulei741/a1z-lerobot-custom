@@ -82,14 +82,32 @@ pnpm build
 完成 [人工 Smoke Test](docs/HARDWARE_SMOKE_TEST.md) 后，现场操作者才应设置：
 
 ```bash
-export A1Z_PROJECT_ROOT=/path/to/a1z-lerobot
+cd /home/anno/learning/A1Z_Lerobot/a1z-lerobot/.worktrees/dual-arm-workflow
+bash a1z_lerobot/scripts/setup.sh can0
+bash a1z_lerobot/scripts/setup.sh can1
+ip -details link show can0
+ip -details link show can1
+
+cd a1z_web
+unset LD_LIBRARY_PATH
+export A1Z_PROJECT_ROOT=/home/anno/learning/A1Z_Lerobot/a1z-lerobot/.worktrees/dual-arm-workflow
 export A1Z_CONDA_ENV=lerobot-a1z
 export A1Z_WEB_MOCK=0
 export A1Z_WEB_ALLOW_HARDWARE=1
-./a1z_web/scripts/dev.sh
+./scripts/dev.sh
 ```
 
 先在终端完成并核对 `can0/can1` 初始化。Web 不替代物理安全检查，也不会自动运行任何硬件 smoke test。
+
+`A1Z_WEB_MOCK=1` 与 `A1Z_WEB_ALLOW_HARDWARE=0` 是开发界面的安全组合，只会模拟任务成功；即使 USB 设备已经插入，也绝不会驱动实机。Real 模式下，每个正式页面在启动动作前都会调用后端权威 Preflight：
+
+- Calibration：检查所选 Leader 串口；
+- Pairing：检查 Leader 串口、对应校准文件及所选 CAN；
+- Teleoperation：检查 Single/Dual 所需的 Leader、校准文件、CAN 和页面启用的相机；
+- Recording：额外检查录制 YAML、其中声明的相机及右腕序列号覆盖；
+- Inference：检查 CAN 和模型运行配置所需的相机，模型兼容性仍通过单独的 Model First 检查完成。
+
+阻断项会以弹窗列出准确资源、原因和恢复命令，后端启动端点还会再次执行同一检查，避免绕过前端或检查后设备发生变化。接口枚举只能证明设备节点存在：Leader 的 7 个电机握手、RealSense 实际取帧和 A1Z 电机状态仍由任务子进程验证；运行期故障会切换任务为 `faulted/failed` 并在全局弹窗提示查看日志。
 
 ## Four workflows
 

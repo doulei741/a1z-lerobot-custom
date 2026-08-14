@@ -64,3 +64,104 @@ test('active task id survives route navigation', async () => {
   await user.click(screen.getByRole('link', { name: /机械臂校准/ }))
   expect(screen.getByText('record-test123')).toBeInTheDocument()
 })
+
+test('teleoperation preflight blocks task start and shows recovery steps', async () => {
+  const calls: string[] = []
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+    const url = String(input)
+    calls.push(url)
+    if (url.includes('/system/health')) return jsonResponse({ mode: 'real', status: 'degraded', resources: {} })
+    if (url.includes('/teleop/preflight')) return jsonResponse({
+      ready: false,
+      simulation: false,
+      workflow: 'teleoperation',
+      mode: 'real',
+      inventory: { mock: false, can: [], leaders: [], cameras: [] },
+      issues: [{
+        code: 'can_missing', resource: 'can0', title: 'can0 不存在',
+        message: 'Left Follower 需要 can0。', action: '运行 setup.sh can0。', severity: 'blocking',
+      }],
+    })
+    if (url.includes('/calibration/profiles')) return jsonResponse({ items: [] })
+    if (url.includes('/tasks')) return jsonResponse([])
+    return jsonResponse({})
+  }))
+  const user = userEvent.setup()
+  render(<App initialPath="/teleoperation" disableRealtime />)
+
+  await user.click(await screen.findByRole('checkbox', { name: /确认运动安全检查/ }))
+  await user.click(screen.getByRole('button', { name: 'Start Teleoperation' }))
+
+  expect(await screen.findByRole('heading', { name: '设备检查未通过' })).toBeInTheDocument()
+  expect(screen.getByText(/运行 setup\.sh can0/)).toBeInTheDocument()
+  expect(calls.some((url) => url.includes('/teleop/start'))).toBe(false)
+})
+
+test('calibration and pairing both use workflow preflight', async () => {
+  const calls: string[] = []
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+    const url = String(input)
+    calls.push(url)
+    if (url.includes('/system/health')) return jsonResponse({ mode: 'real', hardware_motion_enabled: true, status: 'degraded', resources: {} })
+    if (url.includes('/calibration/preflight') || url.includes('/pairing/preflight')) return jsonResponse({
+      ready: false, simulation: false, workflow: url.includes('/pairing/') ? 'pairing' : 'calibration', mode: 'real',
+      inventory: { mock: false, can: [], leaders: [], cameras: [] },
+      issues: [{ code: 'leader_port_missing', resource: 'leader_left', title: 'Leader 串口不可用', message: '未发现端口。', action: '检查 USB。', severity: 'blocking' }],
+    })
+    if (url.includes('/calibration/status')) return jsonResponse({ leader_id: 'a1z_left_leader', exists: true, path: '/tmp/calibration.json' })
+    if (url.includes('/calibration/profiles')) return jsonResponse({ items: [] })
+    if (url.includes('/tasks')) return jsonResponse([])
+    return jsonResponse({})
+  }))
+  const user = userEvent.setup()
+  const rendered = render(<App initialPath="/calibration" disableRealtime />)
+  await user.click(await screen.findByRole('button', { name: '重新校准' }))
+  expect(await screen.findByText('Leader 串口不可用')).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: '关闭' }))
+  await user.click(screen.getByRole('checkbox', { name: /同一安全姿态已确认/ }))
+  await user.click(screen.getByRole('button', { name: /读取 6D/ }))
+  expect(await screen.findByText('Leader 串口不可用')).toBeInTheDocument()
+  expect(calls.some((url) => url.includes('/calibration/preflight'))).toBe(true)
+  expect(calls.some((url) => url.includes('/pairing/preflight'))).toBe(true)
+  expect(calls.some((url) => url.includes('/calibration/start') || url.includes('/pairing/read'))).toBe(false)
+  rendered.unmount()
+})
+
+test('recording and inference start paths use preflight before task creation', async () => {
+  const calls: string[] = []
+  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+    const url = String(input)
+    calls.push(url)
+    if (url.includes('/system/health')) return jsonResponse({ mode: 'real', hardware_motion_enabled: true, status: 'degraded', resources: {} })
+    if (url.includes('/record/compatibility')) return jsonResponse({ compatible: true, new_dataset: true, existing_episodes: 0, checks: { new_dataset: true } })
+    if (url.includes('/inference/inspect-policy')) return jsonResponse({ policy_path: 'outputs/model', policy_type: 'act', state_dim: 14, action_dim: 14, camera_keys: ['top_rgb', 'left_wrist_rgb', 'right_wrist_rgb'], image_shape: [3, 480, 640], fps: 30, processor: 'normalizer', device: 'cuda', checks: { state: true }, compatible: true, compatibility_token: 'token', hardware_connected: false, mock: false })
+    if (url.includes('/record/preflight') || url.includes('/inference/preflight')) return jsonResponse({
+      ready: false, simulation: false, workflow: url.includes('/record/') ? 'recording' : 'inference', mode: 'real',
+      inventory: { mock: false, can: [], leaders: [], cameras: [] },
+      issues: [{ code: 'can_missing', resource: 'can0', title: 'can0 不存在', message: '未发现 CAN。', action: '初始化 can0。', severity: 'blocking' }],
+    })
+    if (url.includes('/calibration/profiles')) return jsonResponse({ items: [] })
+    if (url.includes('/tasks')) return jsonResponse([])
+    return jsonResponse({})
+  }))
+  const user = userEvent.setup()
+  const recording = render(<App initialPath="/recording" disableRealtime />)
+  await user.click(await screen.findByRole('button', { name: '检查 Dataset Compatibility' }))
+  await screen.findByText(/COMPATIBLE/)
+  await user.click(screen.getByRole('checkbox', { name: '确认录制安全检查' }))
+  await user.click(screen.getByRole('button', { name: '开始录制任务' }))
+  expect(await screen.findByText('can0 不存在')).toBeInTheDocument()
+  recording.unmount()
+  cleanup()
+
+  const inference = render(<App initialPath="/inference" disableRealtime />)
+  await user.click(await screen.findByRole('button', { name: /连接硬件之前检查 Policy/ }))
+  await screen.findByText('Compatible')
+  await user.click(screen.getByRole('checkbox', { name: /确认推理安全检查/ }))
+  await user.click(screen.getByRole('button', { name: '开始安全推理' }))
+  expect(await screen.findByText('can0 不存在')).toBeInTheDocument()
+  expect(calls.some((url) => url.includes('/record/preflight'))).toBe(true)
+  expect(calls.some((url) => url.includes('/inference/preflight'))).toBe(true)
+  expect(calls.some((url) => url.includes('/record/start') || url.includes('/inference/start'))).toBe(false)
+  inference.unmount()
+})

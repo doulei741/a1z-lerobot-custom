@@ -13,6 +13,7 @@ from app.core.errors import ApiError
 from app.services.calibration import PairingProfiles
 from app.services.event_bus import EventBus
 from app.services.hardware_manager import HardwareResourceManager
+from app.services.preflight import PreflightService
 from app.services.task_manager import TaskManager
 from app.services.workflows import (
     CommandBuilder,
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     repository = TaskRepository(settings.database_path)
     repository.recover_interrupted()
     tasks = TaskManager(settings, hardware, events, repository)
+    health = HealthService(settings)
     service_container = Services(
         settings=settings,
         hardware=hardware,
@@ -39,9 +41,10 @@ def create_app() -> FastAPI:
         tasks=tasks,
         commands=CommandBuilder(settings),
         policy=PolicyService(settings),
-        health=HealthService(settings),
+        health=health,
         datasets=DatasetCompatibilityService(settings),
         profiles=PairingProfiles(settings.project_root / "a1z_web" / "config" / "profiles"),
+        preflight=PreflightService(settings, health=health),
     )
 
     @asynccontextmanager

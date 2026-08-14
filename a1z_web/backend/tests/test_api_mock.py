@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from unittest.mock import AsyncMock
 
 
 def wait_ready(client, task_id: str) -> dict:
@@ -11,6 +12,34 @@ def wait_ready(client, task_id: str) -> dict:
             return payload
         time.sleep(0.02)
     raise AssertionError("mock task did not become ready")
+
+
+def test_preflight_discloses_mock_mode_and_is_authoritative_for_start(client):
+    response = client.post("/api/teleop/preflight", json={"mode": "dual"})
+    assert response.status_code == 200
+    assert response.json()["simulation"] is True
+    assert response.json()["issues"][0]["code"] == "mock_simulation"
+
+    blocked_report = {
+        "ready": False,
+        "simulation": False,
+        "workflow": "teleoperation",
+        "mode": "real",
+        "issues": [{
+            "code": "can_missing",
+            "resource": "can0",
+            "title": "can0 不存在",
+            "message": "missing",
+            "action": "setup can0",
+            "severity": "blocking",
+        }],
+        "inventory": {},
+    }
+    client.app.state.services.preflight.inspect = AsyncMock(return_value=blocked_report)
+    blocked = client.post("/api/teleop/start", json={"mode": "dual", "safety_confirmed": True})
+    assert blocked.status_code == 409
+    assert blocked.json()["error"]["code"] == "hardware_preflight_failed"
+    assert blocked.json()["error"]["details"]["issues"][0]["resource"] == "can0"
 
 
 def test_mock_teleop_hardware_lock_and_idempotent_stop(client):

@@ -48,6 +48,24 @@ export interface DeviceInventory {
   cameras: Array<{ name: string; serial: string; state: string }>
 }
 
+export interface PreflightIssue {
+  code: string
+  resource: string
+  title: string
+  message: string
+  action: string
+  severity: 'blocking' | 'warning'
+}
+
+export interface PreflightReport {
+  ready: boolean
+  simulation: boolean
+  workflow: 'calibration' | 'pairing' | 'teleoperation' | 'recording' | 'inference'
+  mode: 'mock' | 'real'
+  issues: PreflightIssue[]
+  inventory: DeviceInventory
+}
+
 export interface PolicyReport {
   policy_path: string
   policy_type: string

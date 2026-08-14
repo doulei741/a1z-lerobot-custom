@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.core.config import Settings
 from app.core.errors import ApiError
@@ -19,6 +20,9 @@ from app.schemas.workflows import (
     TeleoperationRequest,
 )
 from app.services.calibration import PairingProfiles
+
+if TYPE_CHECKING:
+    from app.services.preflight import PreflightService
 
 
 class CommandBuilder:
@@ -156,31 +160,64 @@ class HealthService:
         can_devices, leaders = await asyncio.to_thread(self._local_devices)
         cameras: list[dict[str, str]] = []
         try:
+            environment = dict(os.environ)
+            environment.pop("LD_LIBRARY_PATH", None)
             result = await asyncio.to_thread(
                 subprocess.run,
-                ["rs-enumerate-devices", "-s"],
+                [
+                    "conda",
+                    "run",
+                    "-n",
+                    self.settings.conda_env,
+                    "--no-capture-output",
+                    "python",
+                    str(self.settings.project_root / "a1z_web" / "scripts" / "probe-realsense.py"),
+                ],
                 capture_output=True,
                 text=True,
-                timeout=2,
+                timeout=8,
                 check=False,
+                env=environment,
             )
-            for line in result.stdout.splitlines():
-                if line.strip() and not line.startswith("Device Name"):
-                    parts = line.split()
-                    cameras.append({"name": " ".join(parts[:-1]), "serial": parts[-1], "state": "available"})
-        except (FileNotFoundError, subprocess.TimeoutExpired):
+            if result.returncode == 0:
+                cameras = json.loads(result.stdout.strip() or "[]")
+        except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
             pass
         return {"mock": False, "can": can_devices, "leaders": leaders, "cameras": cameras}
 
     @staticmethod
     def _local_devices() -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
-        can_devices = []
-        for path in sorted(Path("/sys/class/net").glob("can*")):
-            state_path = path / "operstate"
-            state = state_path.read_text().strip() if state_path.exists() else "unknown"
-            can_devices.append({"name": path.name, "state": "healthy" if state == "up" else state})
+        can_devices: list[dict[str, Any]] = []
+        try:
+            result = subprocess.run(
+                ["ip", "-details", "-json", "link", "show"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                check=False,
+            )
+            if result.returncode == 0:
+                can_devices = HealthService._parse_can_links(json.loads(result.stdout))
+        except (FileNotFoundError, subprocess.TimeoutExpired, json.JSONDecodeError):
+            pass
         leaders = [{"port": str(path), "state": "available"} for path in sorted(Path("/dev").glob("ttyACM*"))]
         return can_devices, leaders
+
+    @staticmethod
+    def _parse_can_links(links: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        devices = []
+        for link in links:
+            info = link.get("linkinfo", {})
+            if info.get("info_kind") != "can":
+                continue
+            flags = set(link.get("flags", []))
+            state = "healthy" if "UP" in flags and "LOWER_UP" in flags else str(link.get("operstate", "unknown")).lower()
+            data = info.get("info_data", {})
+            item = {"name": link["ifname"], "state": state}
+            if "bitrate" in data:
+                item["bitrate"] = int(data["bitrate"])
+            devices.append(item)
+        return devices
 
 
 class DatasetCompatibilityService:
@@ -283,6 +320,7 @@ class Services:
     health: HealthService
     datasets: DatasetCompatibilityService
     profiles: PairingProfiles
+    preflight: PreflightService
 
     def dataset_existing_episodes(self, payload: RecordingRequest) -> int:
         return int(self.datasets.inspect(payload)["existing_episodes"])
