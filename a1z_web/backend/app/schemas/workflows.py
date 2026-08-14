@@ -21,6 +21,10 @@ def safe_relative_path(value: str) -> str:
 FiniteSix = Annotated[list[float], Field(min_length=6, max_length=6)]
 
 
+class CanInitializeRequest(BaseModel):
+    interface: Literal["can0", "can1"]
+
+
 class JointMapping(BaseModel):
     signs: FiniteSix = Field(default_factory=lambda: [-1, -1, 1, 1, 1, -1])
     scales: FiniteSix = Field(default_factory=lambda: [1, 1, 1, 1, 1, 1])

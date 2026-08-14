@@ -82,22 +82,28 @@ pnpm build
 完成 [人工 Smoke Test](docs/HARDWARE_SMOKE_TEST.md) 后，现场操作者才应设置：
 
 ```bash
-cd /home/anno/learning/A1Z_Lerobot/a1z-lerobot/.worktrees/dual-arm-workflow
-bash a1z_lerobot/scripts/setup.sh can0
-bash a1z_lerobot/scripts/setup.sh can1
-ip -details link show can0
-ip -details link show can1
-
 cd a1z_web
 unset LD_LIBRARY_PATH
-export A1Z_PROJECT_ROOT=/home/anno/learning/A1Z_Lerobot/a1z-lerobot/.worktrees/dual-arm-workflow
-export A1Z_CONDA_ENV=lerobot-a1z
-export A1Z_WEB_MOCK=0
-export A1Z_WEB_ALLOW_HARDWARE=1
 ./scripts/dev.sh
 ```
 
-先在终端完成并核对 `can0/can1` 初始化。Web 不替代物理安全检查，也不会自动运行任何硬件 smoke test。
+实机参数写入 `a1z_web/.env`（项目根目录可自动探测）：
+
+```dotenv
+A1Z_CONDA_ENV=lerobot-a1z
+A1Z_WEB_MOCK=0
+A1Z_WEB_ALLOW_HARDWARE=1
+```
+
+Web 启动后，点击顶部“设备准备中心”：
+
+1. 重新识别 USB-CAN、Leader 与 RealSense；
+2. 分别点击“初始化 can0 / can1”；
+3. 按系统 Polkit 窗口完成管理员授权；
+4. 后端固定配置 `gs_usb`、1 Mbps、`txqueuelen 1000`，并重新读取接口验证；
+5. 两个 CAN Ready 后进入“机械臂校准”完成左右 Leader 校准和 Pairing。
+
+浏览器不能提交 shell 文本，CAN 名只允许 `can0/can1`，Web 不接收或保存 sudo 密码。已有机器人任务占用硬件时，后端会拒绝重配 CAN。命令行 `setup.sh` 仅作为故障维护后备，不再是正常产品流程。Web 不替代物理安全检查，也不会自动运行硬件 smoke test。
 
 `A1Z_WEB_MOCK=1` 与 `A1Z_WEB_ALLOW_HARDWARE=0` 是开发界面的安全组合，只会模拟任务成功；即使 USB 设备已经插入，也绝不会驱动实机。Real 模式下，每个正式页面在启动动作前都会调用后端权威 Preflight：
 
@@ -107,7 +113,7 @@ export A1Z_WEB_ALLOW_HARDWARE=1
 - Recording：额外检查录制 YAML、其中声明的相机及右腕序列号覆盖；
 - Inference：检查 CAN 和模型运行配置所需的相机，模型兼容性仍通过单独的 Model First 检查完成。
 
-阻断项会以弹窗列出准确资源、原因和恢复命令，后端启动端点还会再次执行同一检查，避免绕过前端或检查后设备发生变化。接口枚举只能证明设备节点存在：Leader 的 7 个电机握手、RealSense 实际取帧和 A1Z 电机状态仍由任务子进程验证；运行期故障会切换任务为 `faulted/failed` 并在全局弹窗提示查看日志。
+阻断项会以弹窗列出准确资源、原因和图形化恢复步骤，CAN/Leader/相机问题统一引导至“设备准备中心”，后端启动端点还会再次执行同一检查，避免绕过前端或检查后设备发生变化。接口枚举只能证明设备节点存在：Leader 的 7 个电机握手、RealSense 实际取帧和 A1Z 电机状态仍由任务子进程验证；运行期故障会切换任务为 `faulted/failed` 并在全局弹窗提示查看日志。
 
 ## Four workflows
 
@@ -117,11 +123,13 @@ export A1Z_WEB_ALLOW_HARDWARE=1
 
 ### Teleoperation
 
-支持 Single/Dual、CAN、Leader port/id、6 轴 sign/scale/offset、FPS、EMA、`max_joint_delta`、夹爪启动保持、退出 Home/张开和 Rerun `display_data`。默认映射来自当前现场验证配置；Single 与 Dual 映射不同。真实 worker 代理 `a1z-teleoperate-single/dual`，ready 依赖 A1Z CLI 的真实连接日志，不以“进程存在”冒充 ready。
+支持 Single/Dual、CAN、Leader port/id、6 轴 sign/scale/offset、FPS、EMA、`max_joint_delta`、夹爪启动保持、退出 Home/张开、Rerun `display_data`，以及无相机/启用 RGB 相机、序列号、宽高与相机 FPS。默认映射来自当前现场验证配置；Single 与 Dual 映射不同。真实 worker 代理 `a1z-teleoperate-single/dual`，ready 依赖 A1Z CLI 的真实连接日志，不以“进程存在”冒充 ready。
 
 ### Recording
 
 worker 复用 `RecordConfig`、`make_robot_from_config()`、`make_teleoperator_from_config()`、`record_loop()`、`LeRobotDataset.create/resume()`、`sanity_check_dataset_robot_compatibility()` 和 `VideoEncodingManager`。不再模拟方向键，而使用 stdin JSON 领域协议。
+
+页面可调整录制 YAML、Dataset repo/root/task、Resume 与新增 Episode、Episode/Reset 时间、外层与 Dataset FPS、视频开关、三相机序列号/480p 尺寸、CAN、Leader port/id、Pairing profile、EMA、`max_joint_delta`、夹爪启动保持、退出行为、Rerun 和压缩图显示。所有值通过 Pydantic 验证并传入现有 `RecordConfig`，相机始终为 RGB、`use_depth=false`。
 
 三层状态独立：
 
@@ -133,13 +141,14 @@ worker 复用 `RecordConfig`、`make_robot_from_config()`、`make_teleoperator_f
 
 ### Inference
 
-推理页面没有 Leader 参数。`inspect-policy` 仅读取 checkpoint 的 config/preprocessor，不连接硬件，比较 Single 7D 或 Dual 14D、相机 keys、图像 shape 和 processors，并产生短期 compatibility token。只有 token 与当前 path/mode 匹配才可启动。真实 rollout 仍保持当前 Model First, Hardware Last：模型、pre/postprocessor、CUDA/eval 和 `validate_policy_features()` 成功后才连接 CAN/相机。ACT 的 `gripper_start_hold` 被后端锁定为 false。默认 Safe Test 为 sync、30 FPS、10 秒、`max_joint_delta=0.01`。
+推理页面没有 Leader 参数。可调整任务指令、Single/Dual CAN、策略同步方式、FPS/时长、EMA、`max_joint_delta`、相机序列号/宽高、Rerun 与退出行为。`inspect-policy` 仅读取 checkpoint 的 config/preprocessor，不连接硬件，比较 Single 7D 或 Dual 14D、相机 keys、图像 shape 和 processors，并产生短期 compatibility token。只有 token 与当前 path/mode 匹配才可启动。真实 rollout 仍保持当前 Model First, Hardware Last：模型、pre/postprocessor、CUDA/eval 和 `validate_policy_features()` 成功后才连接 CAN/相机。ACT 的 `gripper_start_hold` 被后端锁定为 false。默认 Safe Test 为 sync、30 FPS、10 秒、`max_joint_delta=0.01`。
 
 ## API and WebSocket
 
 主要 API：
 
 - `GET /api/system/health`, `/api/devices`, `/api/tasks`, `/api/schema/{workflow}`
+- `POST /api/devices/can/initialize`（只允许 can0/can1，固定 1 Mbps，Polkit 授权）
 - `GET /api/tasks/{id}`, `/api/tasks/{id}/logs?after=N`; `POST /api/tasks/{id}/stop`
 - `POST /api/calibration/start`, `/api/calibration/{id}/{middle|record-range|stop-range|save|cancel}`
 - `POST /api/pairing/{read|calculate|save|verify}`

@@ -9,6 +9,7 @@ from app.core.errors import ApiError
 from app.models.tasks import TaskStatus, TaskType
 from app.schemas.workflows import (
     CalibrationStartRequest,
+    CanInitializeRequest,
     DomainAction,
     InferenceRequest,
     PairingCalculateRequest,
@@ -98,6 +99,7 @@ async def devices(request: Request) -> dict[str, Any]:
     if svc.settings.mock:
         return {
             "mock": True,
+            "usb_can": [{"usb_path": "MOCK-USB-1", "vendor_id": "a8fa", "product_id": "8598", "serial": "MOCK-CAN", "product": "HHS CANFD Pro-II", "supported": True}],
             "can": [{"name": "can0", "state": "healthy", "bitrate": 1000000}, {"name": "can1", "state": "healthy", "bitrate": 1000000}],
             "leaders": [{"port": "/dev/ttyACM0", "state": "healthy"}, {"port": "/dev/ttyACM1", "state": "healthy"}],
             "cameras": [
@@ -106,7 +108,23 @@ async def devices(request: Request) -> dict[str, Any]:
                 {"name": "right_wrist_camera", "serial": "MOCK-RIGHT", "state": "healthy"},
             ],
         }
-    return await svc.health.discover_devices()
+    inventory = await svc.health.discover_devices()
+    inventory["usb_can"] = svc.device_setup.discover_usb_can()
+    return inventory
+
+
+@router.post("/devices/can/initialize")
+async def initialize_can(payload: CanInitializeRequest, request: Request) -> dict[str, Any]:
+    svc = services(request)
+    owners = await svc.hardware.snapshot()
+    if owners:
+        raise ApiError(
+            "hardware_resource_busy",
+            "有机器人任务正在占用硬件，不能重新配置 CAN",
+            status_code=409,
+            details={"owners": owners, "action": "先使用软件停止结束当前任务，再初始化 CAN。"},
+        )
+    return await svc.device_setup.initialize_can(payload.interface)
 
 
 @router.get("/schema/{workflow}")

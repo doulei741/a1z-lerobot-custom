@@ -1,11 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Bot, CircleGauge, Database, FileTerminal, Hand, OctagonX, SlidersHorizontal } from 'lucide-react'
+import { AlertTriangle, Bot, CircleGauge, Database, FileTerminal, Hand, OctagonX, SlidersHorizontal, Usb } from 'lucide-react'
 import type { PropsWithChildren } from 'react'
 import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { api } from '../services/api'
 import { usePlatformStore } from '../stores/platform'
 import { LogDrawer } from './LogDrawer'
+import { DeviceCenter } from './DeviceCenter'
 import { PreflightDialog } from './PreflightDialog'
 import { Button, StatusDot } from './ui'
 import type { PreflightReport } from '../types'
@@ -23,6 +24,7 @@ export function AppShell({ children }: PropsWithChildren) {
   const setLogs = usePlatformStore((state) => state.setLogDrawer)
   const ws = usePlatformStore((state) => state.websocketState)
   const [dismissedFault, setDismissedFault] = useState<string | null>(null)
+  const [deviceCenterOpen, setDeviceCenterOpen] = useState(false)
   const health = useQuery({ queryKey: ['health'], queryFn: api.health, refetchInterval: 5000 })
   const task = useQuery({ queryKey: ['task', activeTaskId], queryFn: () => api.task(activeTaskId!), enabled: Boolean(activeTaskId), refetchInterval: 1000 })
   const stop = useMutation({ mutationFn: () => api.stop(activeTaskId!), onSuccess: (result) => { if (['stopped', 'completed', 'failed', 'faulted'].includes(result.status)) setActiveTask(null) } })
@@ -55,7 +57,7 @@ export function AppShell({ children }: PropsWithChildren) {
       <header className="topbar">
         <div className="system-state"><StatusDot state={health.data?.status ?? 'unknown'} label="系统" /><StatusDot state={ws === 'connected' ? 'healthy' : ws === 'connecting' ? 'degraded' : 'unknown'} label="实时通道" />{health.data?.mode === 'mock' && <span className="mock-badge">MOCK</span>}</div>
         <div className="active-task">{task.data ? <><span>{task.data.task_type}</span><strong>{task.data.status.toUpperCase()}</strong><code>{task.data.task_id}</code></> : <span>无活动任务</span>}</div>
-        <Button variant="danger" disabled={!activeTaskId || stop.isPending} onClick={() => stop.mutate()}><OctagonX size={17} />软件停止</Button>
+        <div className="topbar-actions"><Button variant="secondary" onClick={() => setDeviceCenterOpen(true)}><Usb size={16} />设备中心</Button><Button variant="danger" disabled={!activeTaskId || stop.isPending} onClick={() => stop.mutate()}><OctagonX size={17} />软件停止</Button></div>
       </header>
       {health.data?.mode === 'mock' && <div className="mode-banner"><AlertTriangle size={16} /><strong>Mock 仿真模式</strong><span>页面不会连接或移动真实机械臂；启动动作前会再次提示。</span></div>}
       {health.data?.mode === 'real' && !health.data.hardware_motion_enabled && <div className="mode-banner"><AlertTriangle size={16} /><strong>实机动作已禁用</strong><span>设置 A1Z_WEB_ALLOW_HARDWARE=1 并重启后端后才能启动机器人任务。</span></div>}
@@ -63,6 +65,7 @@ export function AppShell({ children }: PropsWithChildren) {
       <footer><span>软件停止 ≠ 硬件急停</span><span>现场必须保持物理急停 / 断能装置可用</span></footer>
     </div>
     <LogDrawer />
+    <DeviceCenter open={deviceCenterOpen} onOpenChange={setDeviceCenterOpen} />
     <PreflightDialog report={faultReport} onClose={() => setDismissedFault(task.data?.task_id ?? null)} onContinueSimulation={() => setDismissedFault(task.data?.task_id ?? null)} />
   </div>
 }

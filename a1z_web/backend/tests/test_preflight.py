@@ -70,7 +70,7 @@ def test_real_dual_teleop_reports_each_missing_can_and_calibration(tmp_path: Pat
     assert report["ready"] is False
     assert codes.count("can_missing") == 2
     assert codes.count("leader_calibration_missing") == 2
-    assert any("setup.sh can0" in issue["action"] for issue in report["issues"])
+    assert any("设备准备中心" in issue["action"] and "can0" in issue["action"] for issue in report["issues"])
 
 
 def test_real_dual_teleop_accepts_up_1mbit_can_ports_and_calibrations(tmp_path: Path) -> None:

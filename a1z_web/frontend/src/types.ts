@@ -46,6 +46,14 @@ export interface DeviceInventory {
   can: Array<{ name: string; state: string; bitrate?: number }>
   leaders: Array<{ port: string; state: string }>
   cameras: Array<{ name: string; serial: string; state: string }>
+  usb_can?: Array<{ usb_path: string; vendor_id: string; product_id: string; serial: string; product: string; supported: boolean }>
+}
+
+export interface CanInitializeResult {
+  state: 'ready'
+  simulation: boolean
+  interface: { name: string; state: string; bitrate: number }
+  message: string
 }
 
 export interface PreflightIssue {

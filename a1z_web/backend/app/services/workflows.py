@@ -22,6 +22,7 @@ from app.schemas.workflows import (
 from app.services.calibration import PairingProfiles
 
 if TYPE_CHECKING:
+    from app.services.device_setup import DeviceSetupService
     from app.services.preflight import PreflightService
 
 
@@ -321,6 +322,7 @@ class Services:
     datasets: DatasetCompatibilityService
     profiles: PairingProfiles
     preflight: PreflightService
+    device_setup: DeviceSetupService
 
     def dataset_existing_episodes(self, payload: RecordingRequest) -> int:
         return int(self.datasets.inspect(payload)["existing_episodes"])

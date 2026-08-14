@@ -11,6 +11,7 @@ from app.core.config import Settings
 from app.core.database import TaskRepository
 from app.core.errors import ApiError
 from app.services.calibration import PairingProfiles
+from app.services.device_setup import DeviceSetupService
 from app.services.event_bus import EventBus
 from app.services.hardware_manager import HardwareResourceManager
 from app.services.preflight import PreflightService
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
         datasets=DatasetCompatibilityService(settings),
         profiles=PairingProfiles(settings.project_root / "a1z_web" / "config" / "profiles"),
         preflight=PreflightService(settings, health=health),
+        device_setup=DeviceSetupService(settings, health=health),
     )
 
     @asynccontextmanager

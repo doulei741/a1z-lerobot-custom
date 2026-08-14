@@ -3,6 +3,10 @@ import { expect, test } from '@playwright/test'
 test('all four workflows are reachable and mock mode is explicit', async ({ page }) => {
   await page.goto('/calibration')
   await expect(page.getByText('MOCK', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '设备中心' }).click()
+  await expect(page.getByRole('heading', { name: '设备准备中心' })).toBeVisible()
+  await expect(page.getByText('Mock 设备清单')).toBeVisible()
+  await page.getByRole('button', { name: '关闭设备中心' }).click()
   for (const [label, title] of [
     ['遥控操作', '遥控操作'],
     ['数据录制', '数据录制'],

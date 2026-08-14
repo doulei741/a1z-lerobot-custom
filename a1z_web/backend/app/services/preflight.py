@@ -121,7 +121,7 @@ class PreflightService:
                         f"leader_{side}",
                         f"{side.title()} Leader 串口不可用",
                         f"配置要求 {port}，但设备发现结果中没有该端口。",
-                        "检查 Leader USB、电源和串口映射；运行 lerobot-find-port 后在页面填写正确端口。",
+                        "打开顶部“设备准备中心”重新识别 Leader，并在当前页面选择发现的串口。",
                     )
                 )
             if needs_calibration and not (self.calibration_root / f"{leader_id}.json").is_file():
@@ -146,7 +146,7 @@ class PreflightService:
                         interface,
                         f"{interface} 不存在",
                         f"{side.title()} Follower 需要 SocketCAN 接口 {interface}。",
-                        f"从项目根目录运行 bash a1z_lerobot/scripts/setup.sh {interface}，再刷新检查。",
+                        f"打开顶部“设备准备中心”，点击“初始化 {interface}”，完成系统授权后重新检查。",
                     )
                 )
                 continue
@@ -157,7 +157,7 @@ class PreflightService:
                         interface,
                         f"{interface} 未处于 UP 状态",
                         f"当前状态为 {device.get('state', 'unknown')}。",
-                        f"重新运行 bash a1z_lerobot/scripts/setup.sh {interface}，并确认 ip -details link show {interface} 为 UP。",
+                        f"打开顶部“设备准备中心”重新初始化 {interface}；页面会验证 UP 和 1 Mbps。",
                     )
                 )
             bitrate = device.get("bitrate")
@@ -168,7 +168,7 @@ class PreflightService:
                         interface,
                         f"无法确认 {interface} 波特率",
                         "设备已出现，但系统未返回可验证的 SocketCAN 波特率。",
-                        f"运行 ip -details link show {interface}；若未显示 bitrate 1000000，重新运行 bash a1z_lerobot/scripts/setup.sh {interface}。",
+                        f"打开顶部“设备准备中心”重新初始化 {interface}，由后端读取并验证波特率。",
                     )
                 )
             elif bitrate != 1_000_000:
@@ -178,7 +178,7 @@ class PreflightService:
                         interface,
                         f"{interface} 波特率不正确",
                         f"当前为 {bitrate} bit/s，A1Z 要求 1000000 bit/s。",
-                        f"重新运行 bash a1z_lerobot/scripts/setup.sh {interface}，不要使用其他波特率。",
+                        f"打开顶部“设备准备中心”重新初始化 {interface}；产品固定使用 1000000 bit/s。",
                     )
                 )
 
@@ -191,7 +191,7 @@ class PreflightService:
                         name,
                         f"相机 {name} 不可用",
                         f"配置要求序列号 {serial}，但当前没有发现该 RealSense。",
-                        "检查相机 USB 3.x 连接和供电，运行 lerobot-find-cameras realsense，并把发现的序列号填入页面。",
+                        "检查相机 USB 3.x 连接和供电，打开顶部“设备准备中心”重新识别，再从页面填写发现的序列号。",
                     )
                 )
 
